@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>FloodLine - synthetic flood evacuation workbench</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<a class="skip" href="#workbench">Skip to the workbench</a>
+
+<header class="mast">
+  <div class="wrap mast-inner">
+    <h1 class="wordmark">FloodLine</h1>
+    <div class="mast-actions">
+      <a class="btn" id="download-jump" href="#exports">Download data</a>
+      <button class="btn primary" id="go-card" type="button">Family go-card</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="notice" role="note">
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false"><path d="M8 1.6 L15 13.8 H1 Z" fill="none" stroke="#a8563c" stroke-width="1.6" stroke-linejoin="round"/><line x1="8" y1="6" x2="8" y2="10" stroke="#a8563c" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12.1" r="0.9" fill="#a8563c"/></svg>
+    Synthetic exercise. Never enter floodwater. Follow local emergency alerts.
+  </p>
+</div>
+
+<main id="workbench" class="wrap layout">
+  <aside class="rail" aria-label="Scenario controls">
+    <form id="edit-form" novalidate>
+      <fieldset>
+        <legend>Scenario</legend>
+        <label class="field" for="preset">Training basin
+          <select id="preset" name="preset"></select>
+        </label>
+        <label class="field" for="origin">Start from
+          <select id="origin" name="origin"></select>
+        </label>
+        <label class="field" for="mode">Travel mode
+          <select id="mode" name="mode">
+            <option value="car">Car</option>
+            <option value="pedestrian">On foot</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <details id="settings" class="secondary">
+        <summary>Storm Settings and Mitigation</summary>
+      <details class="advanced">
+        <summary>Storm and channel overrides</summary>
+        <label class="field" for="custom-rain">Rainfall per 15 minutes, mm, 1 to 24 bins
+          <textarea id="custom-rain" name="custom-rain" rows="2" spellcheck="false"></textarea>
+        </label>
+        <div class="cols">
+          <label class="field" for="cn">Curve number
+            <input id="cn" name="cn" type="text" inputmode="decimal" autocomplete="off">
+          </label>
+          <label class="field" for="impervious">Impervious %, optional
+            <input id="impervious" name="impervious" type="text" inputmode="decimal" autocomplete="off" placeholder="blank = CN direct">
+          </label>
+          <label class="field" for="blockage">Blockage 0 to 1
+            <input id="blockage" name="blockage" type="text" inputmode="decimal" autocomplete="off">
+          </label>
+        </div>
+        <button class="btn small" id="apply-edits" type="submit">Apply overrides</button>
+        <p class="error" id="edit-error" role="alert" hidden></p>
+      </details>
+
+      <fieldset>
+        <legend>Mitigations</legend>
+        <label class="check" for="pavement">
+          <input id="pavement" type="checkbox"> Permeable pavement, curve number minus 8
+        </label>
+        <label class="check" for="clear">
+          <input id="clear" type="checkbox"> Clear drains, roughness back to clean channel
+        </label>
+        <label class="check" for="bridge">
+          <input id="bridge" type="checkbox"> Raise the marked bridge 0.65 m
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Shortcuts</legend>
+        <label class="check" for="shortcuts">
+          <input id="shortcuts" type="checkbox"> Enable keys: P play or pause, G go-card
+        </label>
+      </fieldset>
+
+      <div class="exports" id="exports">
+        <p class="group-label">Downloads</p>
+        <div class="export-row">
+          <button class="btn small" id="export-csv" type="button">CSV telemetry</button>
+          <button class="btn small" id="export-geojson" type="button">GeoJSON route</button>
+          <button class="btn small" id="export-json" type="button">Audit JSON</button>
+        </div>
+        <p id="export-error" class="error" role="alert" hidden></p>
+      </div>
+      </details>
+    </form>
+  </aside>
+
+  <section class="stage" aria-label="Basin model">
+    <figure class="plate">
+      <svg id="map" viewBox="0 0 840 415" preserveAspectRatio="xMidYMid meet"></svg>
+    </figure>
+
+    <ul class="legend" aria-label="Map legend">
+      <li><span class="sw sw-dry"></span>Dry modeled route</li>
+      <li><span class="sw sw-naive"></span>Shortest route</li>
+      <li><span class="sw sw-wet"></span>Flooded road</li>
+      <li><span class="sw sw-water"></span>Channel</li>
+    </ul>
+
+    <div class="timeline">
+      <button class="btn small" id="prev" type="button" aria-label="Back five minutes">Back 5</button>
+      <label class="range-label" for="minute">Storm minute</label>
+      <input id="minute" type="range" min="0" max="360" step="1" value="75" aria-describedby="minute-readout">
+      <output id="minute-readout" for="minute" aria-live="off">75 / 360</output>
+      <button class="btn small" id="next" type="button" aria-label="Forward five minutes">Fwd 5</button>
+      <button class="btn small" id="peak" type="button">Peak</button>
+      <button class="btn small primary" id="play" type="button">Play</button>
+    </div>
+
+    <p id="stage-now" class="stage-now"></p>
+
+    <div id="route-status" class="verdict" aria-label="Route status"></div>
+
+    <section class="panel" aria-labelledby="hydro-heading">
+      <h2 id="hydro-heading">Hydrograph</h2>
+      <svg id="hydrograph" viewBox="0 0 840 168" preserveAspectRatio="xMidYMid meet"></svg>
+      <p id="hydro-stats" class="stats"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="metrics-heading">
+      <h2 id="metrics-heading">Run metrics</h2>
+      <dl id="metrics" class="metrics"></dl>
+    </section>
+  </section>
+</main>
+
+<dialog id="card-dialog" aria-labelledby="card-dialog-title">
+  <div class="card-toolbar">
+    <span id="card-dialog-title" class="group-label">Family go-card</span>
+    <label class="field inline" for="card-language">Language
+      <select id="card-language">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+      </select>
+    </label>
+    <button class="btn small" id="card-print" type="button">Print card</button>
+    <button class="btn small" id="card-close" type="button">Close</button>
+  </div>
+  <div id="card-paper" class="card-paper"></div>
+</dialog>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
