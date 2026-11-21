@@ -58,6 +58,7 @@ export function triangle(minutes, peak, end) {
   if (!Number.isInteger(peak) || !Number.isInteger(end) || peak <= 0 || end <= peak || end > 720) {
     throw new RangeError('Triangle needs integer times with 0 < peak < end <= 720.');
   }
+  if (!Number.isFinite(minutes)) throw new RangeError('Minutes must be finite.');
   if (minutes <= 0 || minutes >= end) return 0;
   const shape = minutes <= peak ? minutes / peak : (end - minutes) / (end - peak);
   return shape * 2 / (end * 60);
@@ -66,6 +67,9 @@ export function triangle(minutes, peak, end) {
 export function rainToDischarge(bins, areaKm2, peak, end) {
   bounded(areaKm2, 0.001, 1000, 'Watershed area');
   triangle(peak, peak, end);
+  if (!Array.isArray(bins) || bins.length === 0) {
+    throw new RangeError('Discharge needs at least one rainfall bin.');
+  }
   const q = new Float64Array(Math.max(HORIZON, bins.at(-1).minute + end) + 1);
   const kernel = Array.from({ length: end }, (_, i) => triangle(i, peak, end));
   for (const { minute, runoffIncrement } of bins) {
@@ -146,6 +150,7 @@ export function simulate({ rain, cn, areaKm2, peakLag, endLag, channel, blockage
   bounded(blockage, 0, 1, 'Blockage');
   bounded(channel.bankfull, 0.01, 100, 'Bankfull depth');
   const effective = { ...channel, n: channel.n * (1 + blockage) };
+  bounded(effective.n, 0.001, 2, 'Effective Manning n');
   const q = rainToDischarge(bins, areaKm2, peakLag, endLag);
   const stage = q.map(value => solveStage(value, effective));
   let peakMinute = 0;

@@ -4,8 +4,8 @@ const GEOJSON_NOTICE = 'Fictional training geometry. Never navigate with this fi
 const CSV_NOTICE = 'Synthetic training data. Never use for navigation.';
 const AUDIT_NOTICE = 'Synthetic training exercise output for education only. It is not a forecast, warning, or evacuation order. Never enter floodwater and follow local emergency alerts.';
 const METERS_PER_DEGREE = 111195;
-const BOM = String.fromCharCode(0xfeff);
-const FORMULA_GUARD = new RegExp('^(?:[\\t\\r\\n]|[\\s' + BOM + ']*[=+@-])', 'u');
+// BOM is a Cf too; the class also covers zero-width spaces, bidi marks and tag chars.
+const FORMULA_GUARD = /^(?:[\t\r\n]|[\s\p{Cf}]*[=+@-])/u;
 
 export function csvCell(value) {
   if (value == null) return '';
@@ -26,6 +26,9 @@ function csvRow(cells) {
 // Route columns are evaluated at each row's own minute; the workbench selection is flagged separately.
 export function telemetryCSV(model, minute, origin, mode, view) {
   const sim = model.active;
+  if (!Number.isInteger(minute) || minute < 0 || minute >= sim.q.length) {
+    throw new RangeError('Export minute is outside the simulated run.');
+  }
   const rainAt = new Map(sim.bins.map(bin => [bin.minute, bin.mm]));
   const header = [
     'minute', 'rainfall_mm', 'discharge_m3_s', 'stage_m', 'overbank_m',
@@ -45,7 +48,7 @@ export function telemetryCSV(model, minute, origin, mode, view) {
       mode,
       rowView.dry?.distance ?? null,
       rowView.naiveMax ?? null,
-      rowView.dry ? (rowView.tripDry ? 'yes' : 'no') : 'unreachable',
+      rowView.dry ? (rowView.tripDry === true ? 'yes' : rowView.tripDry === false ? 'no' : 'unverified') : 'unreachable',
       rowView.departureCutoff,
       i === minute ? 'yes' : 'no',
       CSV_NOTICE,
@@ -101,6 +104,10 @@ export function routeGeoJSON(model, minute, view) {
 
 // Deterministic serialization: object keys sorted recursively, array order preserved.
 export function canonicalJSON(value) {
+  return encodeCanonical(value, new Set());
+}
+
+function encodeCanonical(value, seen) {
   if (value === null) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') {
@@ -108,22 +115,36 @@ export function canonicalJSON(value) {
     return String(value);
   }
   if (typeof value === 'string') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + Array.from(value, canonicalJSON).join(',') + ']';
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new TypeError('Canonical JSON cannot serialize circular structures.');
+    seen.add(value);
+    try {
+      return '[' + Array.from(value, item => encodeCanonical(item, seen)).join(',') + ']';
+    } finally {
+      seen.delete(value);
+    }
+  }
   if (typeof value === 'object') {
-    const proto = Object.getPrototypeOf(value);
-    if (proto !== Object.prototype && proto !== null) {
-      throw new TypeError('Canonical JSON only supports plain objects.');
-    }
-    const keys = Object.keys(value).sort();
-    const parts = [];
-    for (const key of keys) {
-      const item = value[key];
-      if (item === undefined || typeof item === 'function' || typeof item === 'symbol') {
-        throw new TypeError(`Canonical JSON cannot serialize key "${key}".`);
+    if (seen.has(value)) throw new TypeError('Canonical JSON cannot serialize circular structures.');
+    seen.add(value);
+    try {
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) {
+        throw new TypeError('Canonical JSON only supports plain objects.');
       }
-      parts.push(JSON.stringify(key) + ':' + canonicalJSON(item));
+      const keys = Object.keys(value).sort();
+      const parts = [];
+      for (const key of keys) {
+        const item = value[key];
+        if (item === undefined || typeof item === 'function' || typeof item === 'symbol') {
+          throw new TypeError(`Canonical JSON cannot serialize key "${key}".`);
+        }
+        parts.push(JSON.stringify(key) + ':' + encodeCanonical(item, seen));
+      }
+      return '{' + parts.join(',') + '}';
+    } finally {
+      seen.delete(value);
     }
-    return '{' + parts.join(',') + '}';
   }
   throw new TypeError('Canonical JSON only supports standard JSON primitives.');
 }

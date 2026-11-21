@@ -154,12 +154,15 @@ function renderRouteStatus() {
   if (!view.dry) {
     stateP.classList.add('bad');
     stateP.textContent = 'Unreachable at this minute';
-  } else if (view.tripDry) {
+  } else if (view.tripDry === true) {
     stateP.classList.add('ok');
     stateP.textContent = 'Verified dry modeled trip';
-  } else {
+  } else if (view.tripDry === false) {
     stateP.classList.add('warn');
     stateP.textContent = 'Dry at this snapshot, floods during travel';
+  } else {
+    stateP.classList.add('warn');
+    stateP.textContent = 'Dry at this snapshot, trip outlasts the modeled run';
   }
 
   const dl = addEl(root, 'dl');
@@ -181,12 +184,12 @@ function renderRouteStatus() {
   addRow(dl, 'Modeled closure', !view.dry
     ? 'no dry route at this minute'
     : view.closes === null
-      ? 'no modeled closure this run'
+      ? 'no modeled closure from this minute'
       : `route floods at storm minute ${view.closes.toFixed(1)}`);
   if (!view.dry) {
     addRow(dl, 'Leave by', 'not available');
   } else if (view.departureCutoff === null) {
-    addRow(dl, 'Leave by', 'no cutoff needed this run');
+    addRow(dl, 'Leave by', 'no cutoff needed from this minute');
   } else if (view.departureCutoff >= minute) {
     addRow(dl, 'Leave by',
       `storm minute ${view.departureCutoff.toFixed(1)} (${(view.departureCutoff - minute).toFixed(1)} min from now)`);
@@ -218,7 +221,10 @@ function renderMetrics() {
   addRow(dl, 'Volume check',
     `${sim.discharged.toFixed(1)} of ${sim.volume.toFixed(1)} m³, residual ${sim.residual.toPrecision(2)} m³`);
   addRow(dl, 'Stage drop', cmp.stageDrop > 0 ? `${(cmp.stageDrop * 100).toFixed(1)} cm lower` : 'no change');
-  const cutoff = v => v === Infinity ? 'never closes' : v === -Infinity ? 'no dry opening' : `${v.toFixed(1)} min`;
+  const cutoff = v => v === Infinity ? 'never closes'
+    : v === -Infinity ? 'no dry opening'
+    : v < 0 ? 'closed before minute 0'
+    : `${v.toFixed(1)} min`;
   addRow(dl, 'Departure window', `${cutoff(cmp.before)} becomes ${cutoff(cmp.after)}`);
   addRow(dl, 'Extra window', cmp.extraMinutes === null
     ? (cmp.after === Infinity ? 'route never closes during the run' : 'not available')
@@ -323,24 +329,38 @@ els.cardLang.addEventListener('change', () => {
 els.cardPrint.addEventListener('click', () => window.print());
 els.cardClose.addEventListener('click', () => els.dialog.close());
 
-els.exportCsv.addEventListener('click', () => download(
-  'floodline-telemetry.csv',
-  telemetryCSV(state.model, state.minute, state.origin, state.mode, state.view),
-  'text/csv;charset=utf-8',
-));
-els.exportGeo.addEventListener('click', () => download(
-  'floodline-route.geojson',
-  canonicalJSON(routeGeoJSON(state.model, state.minute, state.view)),
-  'application/geo+json',
-));
+function showExportError(error) {
+  els.exportError.textContent = `Export failed: ${error instanceof Error ? error.message : String(error)}`;
+  els.exportError.hidden = false;
+}
+
+els.exportCsv.addEventListener('click', () => {
+  try {
+    download('floodline-telemetry.csv',
+      telemetryCSV(state.model, state.minute, state.origin, state.mode, state.view),
+      'text/csv;charset=utf-8');
+    els.exportError.hidden = true;
+  } catch (error) {
+    showExportError(error);
+  }
+});
+els.exportGeo.addEventListener('click', () => {
+  try {
+    download('floodline-route.geojson',
+      canonicalJSON(routeGeoJSON(state.model, state.minute, state.view)),
+      'application/geo+json');
+    els.exportError.hidden = true;
+  } catch (error) {
+    showExportError(error);
+  }
+});
 els.exportJson.addEventListener('click', async () => {
   try {
     const bundle = await auditBundle(state.model, state.minute, state.origin, state.mode, state.view);
     download('floodline-audit.json', canonicalJSON(bundle), 'application/json');
     els.exportError.hidden = true;
   } catch (error) {
-    els.exportError.textContent = `Audit export failed: ${error instanceof Error ? error.message : String(error)}`;
-    els.exportError.hidden = false;
+    showExportError(error);
   }
 });
 

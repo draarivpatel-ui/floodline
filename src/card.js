@@ -8,13 +8,15 @@ const TEXT = {
     to: 'To',
     statusDry: 'DRY ROUTE AT STORM MINUTE',
     statusWetTrip: 'NO USABLE TRIP AT STORM MINUTE',
+    statusUnverified: 'UNVERIFIED TRIP AT STORM MINUTE',
     statusUnreachable: 'UNREACHABLE AT STORM MINUTE',
-    cutoffOpen: 'No modeled closure during this run',
+    cutoffOpen: 'No modeled closure from this minute',
     cutoffPast: 'Departure cutoff is not available for the current continuous window',
     cutoffAt: value => `Depart by storm minute ${value}`,
     follow: (road, place) => `Follow ${road} toward ${place}`,
     travel: mode => mode === 'car' ? 'By car' : 'On foot',
     wetTrip: 'No usable trip on the displayed route: it floods during travel. Do not enter floodwater.',
+    unverifiedTrip: 'The modeled run ends before this trip finishes, so the full trip cannot be verified dry. Do not enter floodwater.',
     fallback: 'No dry exit in this exercise. Do not enter floodwater. Follow official directions and move to higher ground if instructed.',
     warning: 'Never enter floodwater. If you reach a flooded road, turn around. Follow official emergency instructions.',
     notice: 'Fictional simulation only. Not an evacuation instruction. Follow official emergency alerts.',
@@ -26,13 +28,15 @@ const TEXT = {
     to: 'Hacia',
     statusDry: 'RUTA SECA EN EL MINUTO',
     statusWetTrip: 'SIN TRAYECTO ÚTIL EN EL MINUTO',
+    statusUnverified: 'TRAYECTO SIN VERIFICAR EN EL MINUTO',
     statusUnreachable: 'INACCESIBLE EN EL MINUTO',
-    cutoffOpen: 'Sin cierre modelado durante esta simulación',
+    cutoffOpen: 'Sin cierre modelado a partir de este minuto',
     cutoffPast: 'El límite de salida no está disponible para la ventana continua actual',
     cutoffAt: value => `Salga antes del minuto ${value} de la tormenta`,
     follow: (road, place) => `Siga ${road} hacia ${place}`,
     travel: mode => mode === 'car' ? 'En automóvil' : 'A pie',
     wetTrip: 'No hay trayecto útil en la ruta mostrada: se inunda durante el viaje. No entre en aguas de inundación.',
+    unverifiedTrip: 'La simulación termina antes de que finalice este trayecto, por lo que no puede verificarse seco por completo. No entre en aguas de inundación.',
     fallback: 'No hay salida seca en este ejercicio. No entre en aguas de inundación. Siga las indicaciones oficiales y diríjase a un lugar más alto si se lo indican.',
     warning: 'Nunca entre en aguas de inundación. Si llega a un camino cubierto de agua, dé la vuelta. Siga las instrucciones oficiales de emergencia.',
     notice: 'Simulación ficticia. No es una orden de evacuación. Siga las alertas oficiales de emergencia.',
@@ -64,9 +68,14 @@ export function cardModel(model, minute, origin, mode, view, language) {
     card.warning = `${t.fallback} ${t.notice}`;
     return card;
   }
-  if (!view.tripDry) {
-    card.status = `${t.statusWetTrip} ${round(minute)}`;
-    card.warning = `${t.wetTrip} ${t.notice}`;
+  if (view.tripDry !== true) {
+    if (view.tripDry === false) {
+      card.status = `${t.statusWetTrip} ${round(minute)}`;
+      card.warning = `${t.wetTrip} ${t.notice}`;
+    } else {
+      card.status = `${t.statusUnverified} ${round(minute)}`;
+      card.warning = `${t.unverifiedTrip} ${t.notice}`;
+    }
     return card;
   }
   card.status = `${t.statusDry} ${round(minute)} · ${t.travel(mode)}`;

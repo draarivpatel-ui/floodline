@@ -167,6 +167,65 @@ for (const target of ['input', 'select', 'textarea', 'button', 'a', 'summary', '
   });
 }
 
+for (const prefix of [0x200B, 0x200E, 0x2060, 0x00AD, 0xE0001, 0x202A].map(cp => String.fromCodePoint(cp))) {
+  test(`CSV puts U+${prefix.codePointAt(0).toString(16).toUpperCase()}-prefixed payload behind a literal prefix`, () => {
+    const hostile = `${prefix}=x`;
+    assert.equal(csvCell(hostile), `"'${hostile}"`);
+  });
+}
+
+test('canonical JSON rejects circular structures instead of overflowing the stack', () => {
+  const selfObj = {}; selfObj.self = selfObj;
+  const selfArr = []; selfArr.push(selfArr);
+  const a = { b: {} }; a.b.back = a;
+  for (const bad of [selfObj, selfArr, a]) {
+    assert.throws(() => canonicalJSON(bad), TypeError);
+  }
+  const shared = { v: 1 };
+  assert.equal(canonicalJSON({ x: shared, y: [shared] }), '{"x":{"v":1},"y":[{"v":1}]}');
+});
+
+for (const bad of [-1, 75.5, NaN, model.active.q.length, 10_000]) {
+  test(`telemetry CSV rejects out-of-run minute ${bad}`, () => {
+    assert.throws(() => telemetryCSV(model, bad, 'school', 'car', view), RangeError);
+  });
+}
+
+test('telemetry CSV accepts the final simulated minute', () => {
+  const last = model.active.q.length - 1;
+  const tail = inspectScenario(model, last, 'school', 'car');
+  const [head, ...rows] = parseCSV(telemetryCSV(model, last, 'school', 'car', tail));
+  assert.equal(Number(rows.at(-1)[head.indexOf('minute')]), last);
+  assert.equal(rows.at(-1)[head.indexOf('selected_snapshot')], 'yes');
+  assert.equal(rows.at(-1)[head.indexOf('trip_dry')], 'yes');
+});
+
+test('telemetry CSV flags an unverifiable trip instead of claiming it dry', () => {
+  const [head, ...rows] = parseCSV(telemetryCSV(
+    model, minute, 'school', 'car', { ...view, tripDry: null },
+  ));
+  assert.equal(rows[minute][head.indexOf('trip_dry')], 'unverified');
+});
+
+for (const language of ['en', 'es']) {
+  test(`${language} go-card withholds directions for a trip that outlasts the run`, () => {
+    const card = cardModel(model, minute, 'school', 'car', { ...view, tripDry: null }, language);
+    assert.match(card.status, language === 'en' ? /unverified/i : /sin verificar/i);
+    assert.deepEqual(card.legs, []);
+    assert.equal(card.shelter, null);
+  });
+}
+
+for (const language of ['en', 'es']) {
+  test(`${language} card claims no closure only ahead of a reopened route`, () => {
+    const reopened = inspectScenario(model, 200, 'school', 'car');
+    assert.ok(reopened.dry);
+    assert.equal(reopened.closes, null);
+    const card = cardModel(model, 200, 'school', 'car', reopened, language);
+    assert.match(card.cutoff, language === 'en' ? /from this minute/i : /a partir de este minuto/i);
+  });
+}
+
 test('front-end release preserves text hygiene and an offline-first security policy', () => {
   const files = ['index.html', 'styles.css', 'README.md', 'sw.js',
     ...readdirSync(path.join(root, 'src')).filter(name => name.endsWith('.js')).map(name => `src/${name}`)];

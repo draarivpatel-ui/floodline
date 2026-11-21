@@ -1,17 +1,43 @@
-import { firstAbove, normalDepthDischarge, sampleDischarge, solveStage } from './hydrology.js';
+import { bounded, firstAbove, normalDepthDischarge, sampleDischarge, solveStage } from './hydrology.js';
 
 export const DEPTH_REFERENCES = Object.freeze({ pedestrian: 0.15, car: 0.30 });
 export const TRAVEL_METERS_PER_MIN = Object.freeze({ pedestrian: 80, car: 400 });
 
+// Node and edge state is keyed by id; a repeated id or dangling endpoint would merge or crash later.
+function graphNodes(graph) {
+  const nodes = new Map();
+  for (const node of graph.nodes) {
+    if (nodes.has(node.id) || !Number.isFinite(node.floor)) {
+      throw new RangeError(`Invalid place ${node.id}.`);
+    }
+    nodes.set(node.id, node);
+  }
+  return nodes;
+}
+
+function checkRoads(graph, nodes) {
+  const seen = new Set();
+  for (const edge of graph.edges) {
+    if (seen.has(edge.id) || !nodes.has(edge.a) || !nodes.has(edge.b) ||
+        !Number.isFinite(edge.m) || edge.m <= 0) {
+      throw new RangeError(`Invalid road ${edge.id}.`);
+    }
+    seen.add(edge.id);
+  }
+}
+
 export function shortestPath(graph, start, destinations, allows = () => true) {
-  const nodes = new Map(graph.nodes.map(node => [node.id, node]));
+  const nodes = graphNodes(graph);
   const goals = new Set(destinations);
   if (!nodes.has(start) || goals.size === 0) return null;
   const adjacent = new Map([...nodes.keys()].map(id => [id, []]));
+  const seen = new Set();
   for (const edge of graph.edges) {
-    if (!adjacent.has(edge.a) || !adjacent.has(edge.b) || !Number.isFinite(edge.m) || edge.m <= 0) {
+    if (seen.has(edge.id) || !adjacent.has(edge.a) || !adjacent.has(edge.b) ||
+        !Number.isFinite(edge.m) || edge.m <= 0) {
       throw new RangeError(`Invalid road ${edge.id}.`);
     }
+    seen.add(edge.id);
     if (allows(edge)) {
       adjacent.get(edge.a).push([edge.b, edge]);
       adjacent.get(edge.b).push([edge.a, edge]);
@@ -83,9 +109,11 @@ function intervals(path, floors, metersPerMinute) {
 
 export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
   if (!Object.hasOwn(TRAVEL_METERS_PER_MIN, mode)) throw new RangeError('Unknown travel mode.');
+  bounded(raise, 0, 10, 'Bridge raise');
   const discharge = sampleDischarge(sim.q, minute);
   const stage = Number.isInteger(minute) ? sim.stage[minute] : solveStage(discharge, sim.channel);
-  const nodes = new Map(graph.nodes.map(node => [node.id, node]));
+  const nodes = graphNodes(graph);
+  checkRoads(graph, nodes);
   const nodesWet = new Map(graph.nodes.map(node => [node.id, featureDepth(stage, node.floor)]));
   const goals = graph.nodes.filter(node => node.type === 'shelter').map(node => node.id);
   const floors = new Map(graph.edges.map(edge => [edge.id, roadFloor(edge, nodes, raise)]));
@@ -103,7 +131,8 @@ export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
 
   let closes = Infinity;
   let departureCutoff = Infinity;
-  let tripDry = true;
+  let tripFlooded = false;
+  let unverifiable = false;
   const end = sim.q.length - 1;
   const legs = intervals(dry, floors, TRAVEL_METERS_PER_MIN[mode]);
   for (const { floor, entry, exit } of legs) {
@@ -114,9 +143,14 @@ export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
       departureCutoff = Math.min(departureCutoff, wet - exit);
     }
     if (minute + entry <= end && roadSchedule(sim, floor, minute + entry, Math.min(end, minute + exit)) !== null) {
-      tripDry = false;
+      tripFlooded = true;
     }
+    // simulate() carries the whole runoff tail, so flow is zero by the array's last sample and
+    // nothing can flood past it; only a sim that still flows at the end leaves the tail unknown.
+    if (minute + exit > end && sim.q[end] > 0) unverifiable = true;
   }
+  // null when the trip outlasts the simulated run: dry so far, never claimed verified.
+  const tripDry = tripFlooded ? false : (unverifiable ? null : true);
   const minFloor = Math.min(dry.shelter.floor, ...dry.edges.map(edge => floors.get(edge.id)));
   return {
     ...base, clearance: Math.max(0, minFloor - stage),
@@ -130,7 +164,9 @@ export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
 export function initialDepartureCutoff(graph, sim, origin, mode, raise = 0) {
   const speed = TRAVEL_METERS_PER_MIN[mode];
   if (!Object.hasOwn(TRAVEL_METERS_PER_MIN, mode)) throw new RangeError('Unknown travel mode.');
-  const nodes = new Map(graph.nodes.map(node => [node.id, node]));
+  bounded(raise, 0, 10, 'Bridge raise');
+  const nodes = graphNodes(graph);
+  checkRoads(graph, nodes);
   const closes = new Map(graph.edges.map(edge => [
     edge.id, roadSchedule(sim, roadFloor(edge, nodes, raise), 0, sim.q.length - 1) ?? Infinity,
   ]));

@@ -160,6 +160,43 @@ test('crossing time is piecewise linear in discharge, strict at tangent and exac
   assert.throws(() => sampleDischarge(discharge, 5.1), RangeError);
 });
 
+for (const bad of [NaN, Infinity, -Infinity]) {
+  test(`triangle rejects non-finite minute ${bad}`, () => {
+    assert.throws(() => triangle(bad, 5, 10), RangeError);
+  });
+}
+
+test('triangle keeps boundary zeros and interpolates fractional minutes', () => {
+  assert.equal(triangle(0, 5, 10), 0);
+  assert.equal(triangle(10, 5, 10), 0);
+  assert.equal(triangle(-3, 5, 10), 0);
+  near(triangle(2.5, 5, 10), triangle(5, 5, 10) / 2, 1e-15);
+});
+
+for (const bins of [[], null, undefined, 'not-array']) {
+  test(`discharge convolution rejects ${JSON.stringify(bins)} bins`, () => {
+    assert.throws(() => rainToDischarge(bins, 1, 5, 10), RangeError);
+  });
+}
+
+for (const [n, blockage] of [[1.5, 1], [2, 0.4], [1.1, 0.9]]) {
+  test(`blocked effective Manning n=${n} x ${1 + blockage} is rejected up front`, () => {
+    assert.throws(() => simulate({
+      rain: [0, 0, 0], cn: 80, areaKm2: 2, peakLag: 20, endLag: 90, blockage,
+      channel: { width: 10, sideSlope: 2, n, slope: 0.001, bankfull: 2 },
+    }), /Effective Manning n/);
+  });
+}
+
+test('largest admitted blocked roughness still simulates', () => {
+  const s = simulate({
+    rain: [0, 0, 0], cn: 80, areaKm2: 2, peakLag: 20, endLag: 90, blockage: 1,
+    channel: { width: 10, sideSlope: 2, n: 0.9, slope: 0.001, bankfull: 2 },
+  });
+  assert.equal(s.channel.n, 1.8);
+  assert.equal(s.peakQ, 0);
+});
+
 for (const p of PRESETS) {
   test(`${p.id} solves first overbank from stage-discharge instead of stage interpolation`, () => {
     const s = buildScenario(p).active;

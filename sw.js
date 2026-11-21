@@ -1,6 +1,6 @@
 const SCOPE = new URL(self.registration.scope);
 const PREFIX = `floodline-shell:${SCOPE.pathname}:`;
-const VERSION = `${PREFIX}v2`;
+const VERSION = `${PREFIX}v3`;
 const SHELL = [
   'index.html',
   'styles.css',
@@ -19,7 +19,7 @@ const SHELL = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(VERSION);
-    await cache.addAll(SHELL.map(name => new URL(name, SCOPE).href));
+    await cache.addAll(SHELL.map(name => new Request(new URL(name, SCOPE), { cache: 'reload' })));
     await self.skipWaiting();
   })());
 });

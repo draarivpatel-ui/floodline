@@ -178,6 +178,115 @@ for (const p of PRESETS) {
   }
 }
 
+test('duplicate road ids are rejected instead of silently merged', () => {
+  const dup = {
+    nodes: [
+      { id: '0', type: 'home', floor: 8 },
+      { id: '1', type: 'junction', floor: 8 },
+      { id: '2', type: 'shelter', floor: 8 },
+    ],
+    edges: [
+      { id: 'dup', a: '0', b: '1', m: 100, floor: 1 },
+      { id: 'dup', a: '1', b: '2', m: 300, floor: 5 },
+    ],
+  };
+  const s = signal([0, 3, 3]);
+  assert.throws(() => routeAt(dup, s, 1, '0', 'car'), /Invalid road dup/);
+  assert.throws(() => initialDepartureCutoff(dup, s, '0', 'car'), /Invalid road dup/);
+  assert.throws(() => shortestPath(dup, '0', ['2']), /Invalid road dup/);
+});
+
+test('duplicate place ids and non-finite floors are rejected like road defects', () => {
+  const dupNode = {
+    nodes: [
+      { id: '0', type: 'home', floor: 8 },
+      { id: '0', type: 'shelter', floor: 1 },
+      { id: '2', type: 'shelter', floor: 8 },
+    ],
+    edges: [{ id: 'e0', a: '0', b: '2', m: 10, floor: 8 }],
+  };
+  const nanFloor = {
+    nodes: [
+      { id: '0', type: 'home', floor: NaN },
+      { id: '2', type: 'shelter', floor: 8 },
+    ],
+    edges: [{ id: 'e0', a: '0', b: '2', m: 10, floor: 8 }],
+  };
+  const s = signal([0, 1, 1]);
+  for (const bad of [dupNode, nanFloor]) {
+    assert.throws(() => routeAt(bad, s, 1, '0', 'car'), /Invalid place/);
+    assert.throws(() => initialDepartureCutoff(bad, s, '0', 'car'), /Invalid place/);
+    assert.throws(() => shortestPath(bad, '0', ['2']), /Invalid place/);
+  }
+});
+
+test('roads referencing unknown nodes throw a domain RangeError', () => {
+  const ghost = {
+    nodes: [
+      { id: '0', type: 'home', floor: 8 },
+      { id: '2', type: 'shelter', floor: 8 },
+    ],
+    edges: [{ id: 'e0', a: '0', b: 'ghost', m: 10, floor: 8 }],
+  };
+  const s = signal([0, 1, 1]);
+  assert.throws(() => routeAt(ghost, s, 1, '0', 'car'), RangeError);
+  assert.throws(() => initialDepartureCutoff(ghost, s, '0', 'car'), RangeError);
+  assert.throws(() => shortestPath(ghost, '0', ['2']), RangeError);
+});
+
+for (const bad of [-1, -0.001, NaN, Infinity, 10.5]) {
+  test(`bridge raise ${bad} is rejected`, () => {
+    const g = graph(4, [[0, 2, 100, 8, true]]);
+    const s = signal([0, 1, 1]);
+    assert.throws(() => routeAt(g, s, 1, '0', 'car', bad), /Bridge raise/);
+    assert.throws(() => initialDepartureCutoff(g, s, '0', 'car', bad), /Bridge raise/);
+  });
+}
+
+test('bridge raise at the documented extremes still routes', () => {
+  const g = graph(4, [[0, 2, 100, 8, true]]);
+  const s = signal([0, 1, 1]);
+  assert.ok(routeAt(g, s, 1, '0', 'car', 10).dry);
+  assert.equal(typeof initialDepartureCutoff(g, s, '0', 'car', 0), 'number');
+});
+
+test('a trip extending past a still-flowing run reports unverified, not dry', () => {
+  const g = graph(5, [[0, 1, 2000, 8], [1, 3, 2000, 8]]);
+  const s = signal([0, 0, 0, 0, 0, 1]);
+  const view = routeAt(g, s, 4, '0', 'car');
+  assert.ok(view.dry);
+  assert.equal(view.tripDry, null);
+  assert.equal(view.travelMinutes, 10);
+});
+
+test('a flood inside the checked window still reports a wet trip past the horizon', () => {
+  const g = graph(5, [[0, 4, 3000, 2]]);
+  const s = signal([0, 0, 0, 0, 0, 4]);
+  const view = routeAt(g, s, 4, '0', 'car');
+  assert.ok(view.dry);
+  assert.equal(view.tripDry, false);
+});
+
+test('a drained tail is certain dry: the last minute of every preset stays verified', () => {
+  for (const p of PRESETS) {
+    const model = buildScenario(p);
+    for (const mode of ['car', 'pedestrian']) {
+      const view = inspectScenario(model, 360, 'school', mode);
+      assert.ok(view.dry);
+      assert.equal(view.tripDry, true, `${p.id} ${mode}`);
+    }
+  }
+});
+
+test('a trip finishing inside the run stays verified', () => {
+  const g = graph(5, [[0, 4, 3000, 8]]);
+  const s = signal(new Array(12).fill(0));
+  const view = routeAt(g, s, 3, '0', 'car');
+  assert.ok(view.dry);
+  assert.equal(view.tripDry, true);
+  assert.equal(view.travelMinutes, 7.5);
+});
+
 test('bankfull and depth comparisons agree at a fractional sampled crossing', () => {
   const g = graph(3, [[0, 1, 60, 2]]);
   const s = signal([0, 1, 3, 4]);

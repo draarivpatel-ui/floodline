@@ -111,9 +111,9 @@ export function renderMap(svg, model, view, origin, minute) {
     const d = pathFromNodes(graph.nodes, view.dry.nodes);
     el('path', { d, fill: 'none', stroke: '#0c2a29', 'stroke-width': 8.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, roads);
     el('path', {
-      d, fill: 'none', stroke: view.tripDry ? '#bdeba7' : '#8fbf83', 'stroke-width': 4.6,
+      d, fill: 'none', stroke: view.tripDry === true ? '#bdeba7' : '#8fbf83', 'stroke-width': 4.6,
       'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-      'stroke-dasharray': view.tripDry ? 'none' : '10 6',
+      'stroke-dasharray': view.tripDry === true ? 'none' : '10 6',
     }, roads);
   }
 
