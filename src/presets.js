@@ -3,8 +3,8 @@ import { compareMitigation, routeAt } from './routing.js';
 
 const nodeRows = [
   ['school', 'Cypress School', 'school', 175, 205, 4.15],
-  ['homes', 'Willow Homes', 'home', 92, 305, 2.70],
-  ['gardens', 'Terrace Homes', 'home', 615, 302, 3.00],
+  ['homes', 'Willow Homes', 'home', 92, 305, 2.70, 96],
+  ['gardens', 'Terrace Homes', 'home', 615, 302, 3.00, 74],
   ['westNorth', 'West Ridge', 'junction', 206, 104, 4.7],
   ['eastNorth', 'East Ridge', 'junction', 512, 92, 4.8],
   ['westLow', 'Low crossing west', 'junction', 329, 210, 3.85],
@@ -39,8 +39,9 @@ const roadRows = [
 ];
 
 const makeGraph = (relief, shear) => {
-  const nodes = nodeRows.map(([id, label, type, x, y, floor]) => ({
+  const nodes = nodeRows.map(([id, label, type, x, y, floor, households]) => ({
     id, label, type, x: x + shear * (y - 200) / 200, y, floor: floor * relief,
+    households: households ?? 0,
   }));
   const map = new Map(nodes.map(node => [node.id, node]));
   const edges = roadRows.map(([id, label, a, b, floor, bridge = false]) => ({

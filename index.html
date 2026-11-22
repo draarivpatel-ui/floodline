@@ -139,6 +139,56 @@
       <h2 id="metrics-heading">Run metrics</h2>
       <dl id="metrics" class="metrics"></dl>
     </section>
+
+    <section class="panel" aria-labelledby="compare-heading">
+      <h2 id="compare-heading">Storm tier mitigation comparator</h2>
+      <div class="tier-row" id="tier-row" role="group" aria-label="Storm severity tier"></div>
+      <div class="slider-row">
+        <label class="slider" for="intensity">Custom storm intensity
+          <input id="intensity" type="range" min="40" max="220" step="5" value="140">
+          <output id="intensity-readout" for="intensity">x1.40</output>
+        </label>
+        <label class="slider" for="budget">Budget cap
+          <input id="budget" type="range" min="0" max="90" step="1" value="90">
+          <output id="budget-readout" for="budget">$9.0M</output>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table id="compare-table" class="sheet"></table>
+      </div>
+      <p class="stats" id="compare-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="cutoff-heading">
+      <h2 id="cutoff-heading">Evacuation cutoff timeline</h2>
+      <svg id="cutoff-chart" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="table-wrap">
+        <table id="alert-matrix" class="sheet matrix"></table>
+      </div>
+      <p class="stats" id="cutoff-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="brief-heading">
+      <h2 id="brief-heading">Resilience brief and self-checks</h2>
+      <div class="export-row">
+        <button class="btn small" id="export-brief-json" type="button">Brief JSON</button>
+        <button class="btn small" id="export-brief-csv" type="button">Brief CSV</button>
+        <button class="btn small" id="export-brief-md" type="button">Brief Markdown</button>
+        <button class="btn small" id="bookmark" type="button">Bookmark link</button>
+      </div>
+      <label class="field" for="bookmark-url">Shareable scenario link
+        <input id="bookmark-url" type="text" readonly spellcheck="false" autocomplete="off">
+      </label>
+      <label class="field" for="verify-input">Paste a brief JSON to verify its signature
+        <textarea id="verify-input" rows="3" spellcheck="false"></textarea>
+      </label>
+      <div class="export-row">
+        <button class="btn small" id="verify-btn" type="button">Verify signature</button>
+        <button class="btn small" id="selftest" type="button">Run self-tests</button>
+      </div>
+      <p id="verify-result" class="error" role="alert" hidden></p>
+      <ol id="selftest-list" class="selftest-list"></ol>
+    </section>
   </section>
 </main>
 

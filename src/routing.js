@@ -4,7 +4,7 @@ export const DEPTH_REFERENCES = Object.freeze({ pedestrian: 0.15, car: 0.30 });
 export const TRAVEL_METERS_PER_MIN = Object.freeze({ pedestrian: 80, car: 400 });
 
 // Node and edge state is keyed by id; a repeated id or dangling endpoint would merge or crash later.
-function graphNodes(graph) {
+export function graphNodes(graph) {
   const nodes = new Map();
   for (const node of graph.nodes) {
     if (nodes.has(node.id) || !Number.isFinite(node.floor)) {
@@ -15,7 +15,7 @@ function graphNodes(graph) {
   return nodes;
 }
 
-function checkRoads(graph, nodes) {
+export function checkRoads(graph, nodes) {
   const seen = new Set();
   for (const edge of graph.edges) {
     if (seen.has(edge.id) || !nodes.has(edge.a) || !nodes.has(edge.b) ||
@@ -89,8 +89,18 @@ export function isAboveReference(depth, mode) {
   return depth >= DEPTH_REFERENCES[mode];
 }
 
-export function roadFloor(edge, nodes, raise = 0) {
-  return Math.min(edge.floor + (edge.bridge ? raise : 0), nodes.get(edge.a).floor, nodes.get(edge.b).floor);
+export function checkLifts(lifts) {
+  if (lifts === null || lifts === undefined) return;
+  if (!(lifts instanceof Map)) throw new TypeError('Crossing lifts must be a Map of road id to meters.');
+  for (const [id, lift] of lifts) {
+    if (typeof id !== 'string') throw new TypeError('Crossing lifts must be keyed by road id.');
+    bounded(lift, 0, 10, `Crossing lift for ${id}`);
+  }
+}
+
+export function roadFloor(edge, nodes, raise = 0, lifts = null) {
+  const lifted = edge.floor + (edge.bridge ? raise : 0) + (lifts?.get(edge.id) ?? 0);
+  return Math.min(lifted, nodes.get(edge.a).floor, nodes.get(edge.b).floor);
 }
 
 function roadSchedule(sim, floor, start, end) {
@@ -107,16 +117,17 @@ function intervals(path, floors, metersPerMinute) {
   });
 }
 
-export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
+export function routeAt(graph, sim, minute, origin, mode, raise = 0, lifts = null) {
   if (!Object.hasOwn(TRAVEL_METERS_PER_MIN, mode)) throw new RangeError('Unknown travel mode.');
   bounded(raise, 0, 10, 'Bridge raise');
+  checkLifts(lifts);
   const discharge = sampleDischarge(sim.q, minute);
   const stage = Number.isInteger(minute) ? sim.stage[minute] : solveStage(discharge, sim.channel);
   const nodes = graphNodes(graph);
   checkRoads(graph, nodes);
   const nodesWet = new Map(graph.nodes.map(node => [node.id, featureDepth(stage, node.floor)]));
   const goals = graph.nodes.filter(node => node.type === 'shelter').map(node => node.id);
-  const floors = new Map(graph.edges.map(edge => [edge.id, roadFloor(edge, nodes, raise)]));
+  const floors = new Map(graph.edges.map(edge => [edge.id, roadFloor(edge, nodes, raise, lifts)]));
   const limits = new Map(graph.edges.map(edge => [edge.id, normalDepthDischarge(floors.get(edge.id), sim.channel)]));
   const depths = new Map(graph.edges.map(edge => [
     edge.id, discharge > limits.get(edge.id) ? featureDepth(stage, floors.get(edge.id)) : 0,
@@ -160,15 +171,37 @@ export function routeAt(graph, sim, minute, origin, mode, raise = 0) {
   };
 }
 
+// Snapshot road state under an impassability depth: a road is out when its modeled
+// water depth reaches the threshold (the 0.30 m vehicle reference means "at or above").
+export function passableSnapshot(graph, sim, minute, threshold, raise = 0, lifts = null) {
+  bounded(threshold, 0, 10, 'Impassability depth');
+  bounded(raise, 0, 10, 'Bridge raise');
+  checkLifts(lifts);
+  const discharge = sampleDischarge(sim.q, minute);
+  const stage = Number.isInteger(minute) ? sim.stage[minute] : solveStage(discharge, sim.channel);
+  const nodes = graphNodes(graph);
+  checkRoads(graph, nodes);
+  const floors = new Map(graph.edges.map(edge => [edge.id, roadFloor(edge, nodes, raise, lifts)]));
+  const depths = new Map(graph.edges.map(edge => [edge.id, featureDepth(stage, floors.get(edge.id))]));
+  const nodeDepths = new Map(graph.nodes.map(node => [node.id, featureDepth(stage, node.floor)]));
+  const impassable = depth => depth > 0 && depth >= threshold;
+  const goals = graph.nodes.filter(node => node.type === 'shelter').map(node => node.id);
+  return { stage, discharge, floors, depths, nodeDepths, goals, impassable, threshold };
+}
+
 // Best cutoff across paths that open dry at minute zero, without waiting or reopening.
-export function initialDepartureCutoff(graph, sim, origin, mode, raise = 0) {
+// With a positive threshold the cutoff uses passability (depth below threshold),
+// matching the comparator's vehicle reference instead of the strict dry rule.
+export function initialDepartureCutoff(graph, sim, origin, mode, raise = 0, lifts = null, threshold = 0) {
   const speed = TRAVEL_METERS_PER_MIN[mode];
   if (!Object.hasOwn(TRAVEL_METERS_PER_MIN, mode)) throw new RangeError('Unknown travel mode.');
   bounded(raise, 0, 10, 'Bridge raise');
+  bounded(threshold, 0, 10, 'Impassability depth');
+  checkLifts(lifts);
   const nodes = graphNodes(graph);
   checkRoads(graph, nodes);
   const closes = new Map(graph.edges.map(edge => [
-    edge.id, roadSchedule(sim, roadFloor(edge, nodes, raise), 0, sim.q.length - 1) ?? Infinity,
+    edge.id, roadSchedule(sim, roadFloor(edge, nodes, raise, lifts) + threshold, 0, sim.q.length - 1) ?? Infinity,
   ]));
   const latest = new Map(graph.nodes.filter(node => node.type === 'shelter').map(node => [node.id, Infinity]));
   const unsettled = new Set(nodes.keys());

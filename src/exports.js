@@ -1,4 +1,5 @@
 import { DEPTH_REFERENCES, routeAt } from './routing.js';
+import { sha256hex } from './sha256.js';
 
 const GEOJSON_NOTICE = 'Fictional training geometry. Never navigate with this file.';
 const CSV_NOTICE = 'Synthetic training data. Never use for navigation.';
@@ -209,9 +210,6 @@ export async function auditBundle(model, minute, origin, mode, view) {
     },
     geojson: routeGeoJSON(model, minute, view),
   };
-  const digest = await globalThis.crypto.subtle.digest(
-    'SHA-256', new TextEncoder().encode(canonicalJSON(payload)),
-  );
-  const sha256 = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, '0')).join('');
+  const sha256 = sha256hex(canonicalJSON(payload));
   return { algorithm: 'SHA-256', sha256, payload };
 }

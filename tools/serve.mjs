@@ -33,6 +33,11 @@ const allowed = new Set([
   '/src/hydrology.js',
   '/src/routing.js',
   '/src/presets.js',
+  '/src/mitigation.js',
+  '/src/timeline.js',
+  '/src/brief.js',
+  '/src/sha256.js',
+  '/src/selftest.js',
 ]);
 
 const BASES = ['/', '/floodline/'];

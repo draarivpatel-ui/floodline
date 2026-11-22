@@ -271,3 +271,88 @@ export function renderHydrograph(svg, model, minute) {
   const qNow = sim.q[Math.min(Math.round(minute), sim.q.length - 1)];
   if (minute <= tMax) el('circle', { cx, cy: yq(qNow), r: 3, fill: '#142b2b' }, svg);
 }
+
+const HOUR_MARKS = [0, 60, 120, 180, 240, 300, 360];
+
+// One strip per vulnerable zone: green while a departure at that storm minute
+// can still be verified dry, red once departures can no longer be verified.
+export function renderCutoffChart(svg, matrix, minute, selectedOrigin) {
+  const W = 840;
+  const m = { left: 118, right: 16, top: 14, bottom: 30 };
+  const rowH = 32;
+  const rows = matrix.rows;
+  const H = m.top + rows.length * rowH + m.bottom;
+  const pw = W - m.left - m.right;
+  const tMax = matrix.tMax;
+  const x = t => m.left + (t / tMax) * pw;
+
+  svg.textContent = '';
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('role', 'img');
+  const title = el('title', {}, svg);
+  title.textContent = 'Evacuation cutoff timeline';
+  const cut = rows.filter(row => row.firstCut !== null)
+    .map(row => `${row.label} minute ${row.firstCut}`).join(', ');
+  const desc = el('desc', {}, svg);
+  desc.textContent = cut
+    ? `Departure feasibility per zone over ${tMax} storm minutes. First failed departures: ${cut}.`
+    : `Every zone can be verified dry through all ${tMax} storm minutes.`;
+
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: '#fffdf7' }, svg);
+  const grid = el('g', { stroke: '#e2e3d3', 'stroke-width': 1, 'aria-hidden': 'true' }, svg);
+  for (const mark of HOUR_MARKS) {
+    el('line', { x1: x(mark), y1: m.top, x2: x(mark), y2: m.top + rows.length * rowH }, grid);
+    drawText(svg, x(mark), m.top + rows.length * rowH + 16, `${mark / 60}h`, {
+      'font-size': 9.5, fill: '#465f57', 'text-anchor': 'middle', 'font-family': MONO_FONT,
+    });
+  }
+  const axis = drawText(svg, m.left + pw / 2, H - 3, 'hours from storm start', {
+    'font-size': 9.5, fill: '#465f57',
+  });
+  axis.setAttribute('text-anchor', 'middle');
+
+  rows.forEach((row, i) => {
+    const gy = m.top + i * rowH;
+    const g = el('g', { 'data-origin': row.origin }, svg);
+    el('rect', { x: 0, y: gy, width: W, height: rowH, fill: 'transparent' }, g);
+    drawText(g, m.left - 8, gy + rowH / 2 + 3.5, row.label, {
+      'font-size': 10.5, fill: '#142b2b', 'text-anchor': 'end',
+      'font-weight': row.origin === selectedOrigin ? 'bold' : 'normal',
+    });
+    el('rect', {
+      x: m.left, y: gy + 9, width: pw, height: rowH - 18,
+      fill: '#efece0', stroke: '#c3c9b9', 'stroke-width': 0.75,
+    }, g);
+    let runStart = 0;
+    for (let t = 1; t <= row.feasible.length; t += 1) {
+      if (t === row.feasible.length || row.feasible[t] !== row.feasible[runStart]) {
+        el('rect', {
+          x: x(runStart), y: gy + 9, width: Math.max(1, x(t) - x(runStart)), height: rowH - 18,
+          fill: row.feasible[runStart] ? '#2d6e51' : '#a8563c',
+        }, g);
+        runStart = t;
+      }
+    }
+    if (row.firstCut !== null) {
+      const fx = x(row.firstCut);
+      el('path', {
+        d: `M${fx.toFixed(1)},${gy + 4} l4,6 h-8 Z`, fill: '#a8563c',
+      }, g);
+      const anchor = row.firstCut > tMax * 0.72 ? 'end' : 'start';
+      drawText(g, fx + (anchor === 'end' ? -6 : 6), gy + 9, `min ${row.firstCut}`, {
+        'font-size': 9, fill: '#a8563c', 'text-anchor': anchor, 'font-family': MONO_FONT,
+      });
+    }
+    if (row.lastSafe === null) {
+      drawText(g, x(4), gy + rowH / 2 + 3.5, 'no safe modeled departure', {
+        'font-size': 9.5, fill: '#fffdf7', 'font-weight': 'bold',
+      });
+    }
+  });
+
+  const cx = x(Math.min(Math.max(minute, 0), tMax));
+  el('line', {
+    x1: cx, y1: m.top - 4, x2: cx, y2: m.top + rows.length * rowH,
+    stroke: '#142b2b', 'stroke-width': 1.4,
+  }, svg);
+}

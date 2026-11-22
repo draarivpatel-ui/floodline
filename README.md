@@ -2,10 +2,12 @@
 
 FloodLine is a small, offline, dependency-free training workbench for flood-evacuation
 reasoning. It lets a class or a family watch a synthetic storm raise water in a fictional
-basin, compare a shortest route against a route that stays dry, and print a bilingual
-(English/Spanish) go-card. Everything on screen is a teaching artifact: the basin, the
-places, the roads, and the storm are invented, and the app issues no forecasts, warnings,
-or evacuation orders.
+basin, compare a shortest route against a route that stays dry, weigh five invented
+mitigation interventions across severity tiers, see when each neighborhood's verified
+departure window closes and reopens, and print a bilingual (English/Spanish) go-card.
+Everything on screen is a teaching artifact: the basin, the places, the roads, the storm,
+the tiers, the household counts, and the intervention costs are invented, and the app
+issues no forecasts, warnings, or evacuation orders.
 
 **Live demo:** [https://aariv.me/floodline/](https://aariv.me/floodline/)
 
@@ -65,6 +67,27 @@ package dependencies.
   later; the departure-window metrics are the closest thing to a reroute search it
   performs. Travel speeds are fixed model constants for comparing scenarios (80 m/min
   on foot, 400 m/min by car), not road-speed estimates.
+- **Cutoff timeline.** Separate from the snapshot routing above, the timeline panel runs
+  an earliest-arrival search per departure minute: every road is tracked as a set of
+  wet intervals, so a road that floods and later drains can carry a later departure.
+  A trip is flagged feasible only when every leg stays dry for its whole crossing window;
+  the flag is conservative (it does not explore waiting mid-trip) but never optimistic.
+  The alert matrix reports each zone's first failed and last safe departure minute plus
+  an hour-by-hour dry/cut strip, which is where pre-evacuation alerts would have to land.
+- **Storm tiers and interventions.** Four named tiers scale the invented storm's rain
+  bins (10-yr, 50-yr, 100-yr, 500-yr labels are planning-model names, not design return
+  periods) and a slider covers a custom scale. Five deterministic interventions
+  (permeable pavement and bioswales, retention basin expansion, culvert elevation,
+  floodwall and pump station, and a combined low-cost package) are compared against the
+  baseline at each run's own peak minute: peak stage drop, passable road-km preserved,
+  stranded-zone reduction, cutoff extension, and households avoided per million dollars.
+  Costs, household counts, and the 0.30 m vehicle impassability reference are disclosed
+  invented unit rates; every intervention is checked to be non-worsening.
+- **Signed brief and bookmarking.** The brief panel exports a signed JSON/CSV/Markdown
+  resilience brief: the payload is canonically serialized and hashed with a built-in
+  SHA-256, so a pasted document can be re-verified in-page and any edit fails the check.
+  A bookmark button encodes the whole scenario (preset, edits, mitigations, tier, mode,
+  minute, budget) into a `#flood=` URL fragment that replays on load.
 - **Volume bookkeeping.** The exported CSV carries the full simulated hydrograph,
   including the tail beyond the 360-minute workbench horizon, and evaluates its route
   columns at each row's own minute. It is per-minute synthetic telemetry, never
@@ -81,7 +104,14 @@ package dependencies.
 
 - `index.html`, `styles.css`: the single-page workbench and the printable go-card.
 - `src/hydrology.js`, `src/routing.js`, `src/presets.js`: model, routing, and scenario data.
-- `src/viz.js`: the dark survey-sheet map and the hydrograph, drawn as SVG.
+- `src/mitigation.js`, `src/timeline.js`: the tier/intervention comparator and the
+  per-minute departure-feasibility timeline.
+- `src/sha256.js`: pure-JavaScript FIPS 180-4 SHA-256 (no Web Crypto dependency).
+- `src/brief.js`: signed resilience briefs, CSV/Markdown renderers, and `#flood=` hash
+  bookmarking with strict decode.
+- `src/selftest.js`: the in-page self-test suite behind "Run self-tests".
+- `src/viz.js`: the dark survey-sheet map, the hydrograph, and the cutoff strip chart,
+  drawn as SVG.
 - `src/exports.js`: CSV telemetry, GeoJSON route snapshot, and a SHA-256 audit bundle with
   canonical (key-sorted, deterministic) JSON serialization.
 - `src/card.js`: the bilingual go-card model and renderer.

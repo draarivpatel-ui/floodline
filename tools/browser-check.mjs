@@ -116,10 +116,10 @@ try {
   }
 
   await Promise.all(['Runtime', 'Page', 'Log', 'Network'].map(domain => send(`${domain}.enable`)));
-  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await navigate();
   assert.equal(await evaluate(`Number(document.querySelector('#minute').value)`), 75);
-  assert.equal(await evaluate('document.documentElement.scrollWidth'), 1280);
+  assert.equal(await evaluate('document.documentElement.scrollWidth'), 1440);
   const initial = await text('#route-status');
   assert.doesNotMatch(initial, /unreachable/i);
   assert.match(await text('#map'), /Canal Underpass/);
@@ -159,6 +159,82 @@ try {
   assert.equal(JSON.parse(geo).type, 'FeatureCollection');
   assert.match(JSON.parse(audit).sha256, /^[a-f0-9]{64}$/);
 
+  // Storm tier comparator, cutoff timeline, self-tests, signed brief, bookmark.
+  assert.equal(await evaluate(`document.querySelectorAll('#tier-row button').length`), 5);
+  assert.equal(await evaluate(`document.querySelectorAll('#compare-table tbody tr').length`), 6);
+  assert.match(await text('#compare-note'), /50-yr/);
+  assert.equal(await evaluate(`document.querySelectorAll('#cutoff-chart g[data-origin]').length`), 3);
+  assert.equal(await evaluate(`document.querySelectorAll('#alert-matrix tbody tr').length`), 3);
+  assert.ok(await evaluate(`document.querySelectorAll('#alert-matrix tbody td.ok, #alert-matrix tbody td.cut').length > 6`));
+
+  const baseStage = await evaluate(`document.querySelector('#compare-table tbody tr td:nth-child(3)').textContent`);
+  await click('#tier-row button[data-tier="t500"]');
+  await until('500-yr comparator', () => evaluate(`/500-yr/.test(${visible('#compare-note')}.textContent)`));
+  assert.notEqual(await evaluate(`document.querySelector('#compare-table tbody tr td:nth-child(3)').textContent`), baseStage);
+  assert.equal(await evaluate(`${visible('#tier-row button[data-tier="t500"]')}.getAttribute('aria-pressed')`), 'true');
+  await setValue('#intensity', '170', 'input');
+  await until('custom intensity tier', () => evaluate(`/custom x1.70/.test(${visible('#compare-note')}.textContent)`));
+  await setValue('#budget', '30', 'input');
+  assert.equal(await text('#budget-readout'), '$3.0M');
+  assert.equal(await evaluate(`document.querySelectorAll('#compare-table tbody tr.dim').length`), 4);
+  await setValue('#budget', '90', 'input');
+  assert.equal(await evaluate(`document.querySelectorAll('#compare-table tbody tr.dim').length`), 0);
+  await click('#tier-row button[data-tier="t50"]');
+  await until('50-yr comparator restored', () => evaluate(`/50-yr/.test(${visible('#compare-note')}.textContent)`));
+
+  await click('#cutoff-chart g[data-origin="homes"]');
+  await until('strip click selects the homes zone', () => evaluate(`${visible('#origin')}.value === 'homes'`));
+  assert.equal(await evaluate(`Number(${visible('#minute')}.value)`), 80);
+  await setValue('#origin', 'school', 'change');
+  await setValue('#minute', '75', 'input');
+
+  await click('#selftest');
+  await until('nine self-test rows', () => evaluate(`document.querySelectorAll('#selftest-list li').length === 9`));
+  assert.equal(await evaluate(`document.querySelectorAll('#selftest-list .pass').length`), 9);
+  assert.equal(await evaluate(`document.querySelectorAll('#selftest-list .fail').length`), 0);
+
+  for (const selector of ['#export-brief-json', '#export-brief-csv', '#export-brief-md']) await click(selector);
+  await until('three brief download blobs', () => evaluate('window.floodlineTestDownloads.length === 6'));
+  const [briefJson, briefCsv, briefMd] = await evaluate(
+    'Promise.all(window.floodlineTestDownloads.slice(3).map(blob => blob.text()))');
+  assert.match(JSON.parse(briefJson).sha256, /^[a-f0-9]{64}$/);
+  assert.match(briefCsv, /^"storm_tier"/);
+  assert.match(briefMd, /SHA-256 [a-f0-9]{64}/);
+
+  await setValue('#verify-input', briefJson, 'input');
+  await click('#verify-btn');
+  assert.match(await text('#verify-result'), /Signature valid/);
+  const tampered = await evaluate(`JSON.stringify((() => {
+    const d = JSON.parse(${JSON.stringify(briefJson)});
+    d.payload.preset = 'tampered';
+    return d;
+  })())`);
+  await setValue('#verify-input', tampered, 'input');
+  await click('#verify-btn');
+  assert.match(await text('#verify-result'), /Signature check failed/);
+
+  await setValue('#preset', 'coastal', 'change');
+  await setValue('#minute', '123', 'input');
+  await setValue('#mode', 'pedestrian', 'change');
+  await click('#pavement');
+  await setValue('#origin', 'homes', 'change');
+  await click('#bookmark');
+  const bookmarkUrl = await evaluate(`${visible('#bookmark-url')}.value`);
+  assert.match(bookmarkUrl, /#flood=/);
+  const bookmarkHash = new URL(bookmarkUrl).hash;
+  const replay = await send('Page.navigate', { url: `${url.origin}${url.pathname}?b=1${bookmarkHash}` });
+  assert.ok(!replay.errorText, replay.errorText);
+  await ready();
+  assert.equal(await evaluate(`${visible('#preset')}.value`), 'coastal');
+  assert.equal(await evaluate(`Number(${visible('#minute')}.value)`), 123);
+  assert.equal(await evaluate(`${visible('#mode')}.value`), 'pedestrian');
+  assert.equal(await evaluate(`${visible('#pavement')}.checked`), true);
+  assert.equal(await evaluate(`${visible('#origin')}.value`), 'homes');
+  const replayNote = await send('Page.navigate', { url: url.href });
+  assert.ok(!replayNote.errorText, replayNote.errorText);
+  await ready();
+  assert.equal(await evaluate(`Number(${visible('#minute')}.value)`), 75);
+
   await click('#play');
   await until('simulation playback advances the time', () => evaluate(`Number(document.querySelector('#minute').value)>75`));
   await click('#play');
@@ -190,6 +266,18 @@ try {
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   assert.equal(await evaluate(`document.querySelector('#settings').open`), false);
   assert.ok(await evaluate(`document.querySelector('#map').getBoundingClientRect().bottom < innerHeight`));
+  for (const selector of ['#tier-row', '#cutoff-chart', '#alert-matrix', '#compare-table',
+    '#selftest', '#verify-btn', '#verify-input']) {
+    const box = await evaluate(`(() => {
+      const el = ${visible(selector)};
+      const wrap = el.closest('.table-wrap') ?? el;
+      return wrap.getBoundingClientRect().width;
+    })()`);
+    assert.ok(box <= 390.5, `${selector} overflows the 390 px viewport (${box})`);
+  }
+  await click('#selftest');
+  await until('nine mobile self-test rows', () => evaluate(`document.querySelectorAll('#selftest-list .pass').length === 9`));
+  assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   if (process.env.FLOODLINE_MOBILE_PNG) {
     const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     await writeFile(process.env.FLOODLINE_MOBILE_PNG, Buffer.from(data, 'base64'));
@@ -216,7 +304,7 @@ try {
   assert.deepEqual(exceptions, []);
   assert.deepEqual(badResponses, []);
   assert.deepEqual(outgoing, []);
-  console.log('1280x800 and 390x844 pass; playback and rerouting, mitigation, input validation, exports, both one-page cards, zero app errors, no external requests, and offline reload verified.');
+  console.log('1440x900 and 390x844 pass; playback and rerouting, mitigation, storm tiers, budget cap, cutoff strips, self-tests, signed briefs, tamper check, bookmark replay, exports, both one-page cards, zero app errors, no external requests, and offline reload verified.');
 } finally {
   socket?.close();
   chrome.kill('SIGTERM');

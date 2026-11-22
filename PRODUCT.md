@@ -2,11 +2,12 @@
 
 ## What FloodLine is
 
-A self-contained, offline training workbench for flood-evacuation reasoning. One page,
-three linked views (scenario controls, an atlas-style basin map, a hydrograph and metric
-panels), a scrubbable storm timeline, and a printable bilingual go-card. It exists so a
-student or a family can practice one question: when is it too late to leave, and which way
-stays dry?
+A self-contained, offline training workbench for flood-evacuation reasoning. One page:
+scenario controls, an atlas-style basin map, a hydrograph and metric panels, a scrubbable
+storm timeline, a severity-tier mitigation comparator, an evacuation cutoff timeline with
+per-zone alert strips, a signed-brief and self-check panel, and a printable bilingual
+go-card. It exists so a student or a family can practice one question: when is it too late
+to leave, and which way stays dry?
 
 ## Audience and use scene
 
@@ -26,8 +27,9 @@ storm, read a verdict, and take a card home.
 - **Offline and dependency-free.** Plain HTML, CSS, and ES modules; no build step, no
   packages, no network calls for data, no external assets or fonts. A scoped service
   worker precaches the shell.
-- **Honest exports.** CSV telemetry, a synthetic-coordinates GeoJSON snapshot, and a
-  SHA-256 audit bundle over deterministic canonical JSON; no timestamps, no local paths.
+- **Honest exports.** CSV telemetry, a synthetic-coordinates GeoJSON snapshot, a SHA-256
+  audit bundle over deterministic canonical JSON, and signed resilience briefs that verify
+  and fail on any edit in-page; no timestamps, no local paths.
 - **Bilingual where it counts.** The app runs in English; the family go-card renders fully
   in English or Spanish.
 

@@ -4,7 +4,14 @@ import { PRESETS, buildScenario, compareScenario, inspectScenario } from './pres
 import { auditBundle, canonicalJSON, routeGeoJSON, telemetryCSV } from './exports.js';
 import { cardModel, renderCard } from './card.js';
 import { shortcutAction } from './controls.js';
-import { renderHydrograph, renderMap } from './viz.js';
+import { renderCutoffChart, renderHydrograph, renderMap } from './viz.js';
+import { IMPASSABLE_M, STORM_TIERS, bestInBudget, compareTier } from './mitigation.js';
+import { cutoffMatrix } from './timeline.js';
+import {
+  briefCSV, briefDocument, briefMarkdown, briefPayload, decodeScenarioHash,
+  encodeScenarioHash, verifyBriefDocument,
+} from './brief.js';
+import { runSelfTests } from './selftest.js';
 
 const $ = id => document.getElementById(id);
 
@@ -22,6 +29,14 @@ const els = {
   shortcuts: $('shortcuts'), settings: $('settings'), downloadJump: $('download-jump'),
   exportCsv: $('export-csv'), exportGeo: $('export-geojson'), exportJson: $('export-json'),
   exportError: $('export-error'),
+  tierRow: $('tier-row'), intensity: $('intensity'), intensityReadout: $('intensity-readout'),
+  budget: $('budget'), budgetReadout: $('budget-readout'),
+  compareTable: $('compare-table'), compareNote: $('compare-note'),
+  cutoffSvg: $('cutoff-chart'), alertMatrix: $('alert-matrix'), cutoffNote: $('cutoff-note'),
+  briefJson: $('export-brief-json'), briefCsv: $('export-brief-csv'), briefMd: $('export-brief-md'),
+  bookmark: $('bookmark'), bookmarkUrl: $('bookmark-url'),
+  verifyInput: $('verify-input'), verifyBtn: $('verify-btn'), verifyResult: $('verify-result'),
+  selftest: $('selftest'), selftestList: $('selftest-list'),
 };
 
 const MODE_LABEL = { car: 'by car', pedestrian: 'on foot' };
@@ -39,6 +54,12 @@ const state = {
   compare: null,
   playing: false,
   timer: null,
+  tier: 't50',
+  intensity: null,
+  budgetM: 9,
+  tierSpec: null,
+  comparison: null,
+  matrix: null,
 };
 
 function addEl(parent, tag, className, text) {
@@ -116,6 +137,7 @@ function computeModel(model = buildScenario(state.preset, state.edits ?? {}, sta
   renderMetrics();
   renderHydroStats();
   renderMinute();
+  computeAnalysis();
 }
 
 // Cheap step: repaint everything that depends on the scrubbed minute.
@@ -126,6 +148,7 @@ function renderMinute() {
   els.minute.setAttribute('aria-valuetext', `${Math.round(state.minute)} minutes from storm start`);
   renderMap(els.map, state.model, state.view, state.origin, state.minute);
   renderHydrograph(els.hydro, state.model, state.minute);
+  if (state.matrix) renderCutoffChart(els.cutoffSvg, state.matrix, state.minute, state.origin);
   renderStageNow();
   renderRouteStatus();
 }
@@ -243,6 +266,145 @@ function renderHydroStats() {
     (mitigated ? ' The dashed gray trace is the run before mitigation.' : '');
 }
 
+// The comparator and cutoff workbench below are heavier than the map repaint,
+// so they run on scenario or tier changes, never on minute scrubs.
+function originNodes() {
+  return state.preset.graph.nodes
+    .filter(node => ['home', 'school'].includes(node.type))
+    .map(node => node.id);
+}
+
+function labelOf(id) {
+  return state.preset.graph.nodes.find(node => node.id === id)?.label ?? id;
+}
+
+function currentTierSpec() {
+  if (state.intensity !== null) {
+    return { id: 'custom', label: `custom x${state.intensity.toFixed(2)}`, scale: state.intensity };
+  }
+  return STORM_TIERS.find(tier => tier.id === state.tier) ?? STORM_TIERS[1];
+}
+
+function computeAnalysis() {
+  state.tierSpec = currentTierSpec();
+  const origins = originNodes();
+  state.comparison = compareTier(state.model, state.tierSpec.scale, origins, 'car');
+  state.matrix = cutoffMatrix(state.preset.graph, state.model.active, origins, state.mode,
+    { raise: state.model.raise });
+  renderComparator();
+  renderCutoff();
+}
+
+const fmtCut = v => v === Infinity ? 'never' : v === -Infinity ? 'closed' : v.toFixed(1);
+
+function renderTierButtons() {
+  els.tierRow.textContent = '';
+  for (const tier of STORM_TIERS) {
+    const btn = addEl(els.tierRow, 'button', 'btn small', tier.label);
+    btn.type = 'button';
+    btn.dataset.tier = tier.id;
+    btn.setAttribute('aria-pressed', String(state.intensity === null && state.tier === tier.id));
+    btn.addEventListener('click', () => {
+      state.tier = tier.id;
+      state.intensity = null;
+      syncTierUi();
+      computeAnalysis();
+    });
+  }
+  const custom = addEl(els.tierRow, 'button', 'btn small', 'Custom');
+  custom.type = 'button';
+  custom.setAttribute('aria-pressed', String(state.intensity !== null));
+  custom.addEventListener('click', () => {
+    state.intensity = Number(els.intensity.value) / 100;
+    syncTierUi();
+    computeAnalysis();
+  });
+}
+
+function syncTierUi() {
+  for (const btn of els.tierRow.querySelectorAll('button')) {
+    btn.setAttribute('aria-pressed', btn.dataset.tier
+      ? String(state.intensity === null && btn.dataset.tier === state.tier)
+      : String(state.intensity !== null));
+  }
+  const shown = state.intensity ?? Number(els.intensity.value) / 100;
+  els.intensityReadout.textContent = `x${shown.toFixed(2)}`;
+  els.budget.value = String(Math.round(state.budgetM * 10));
+  els.budgetReadout.textContent = `$${state.budgetM.toFixed(1)}M`;
+}
+
+function renderComparator() {
+  const cmp = state.comparison;
+  if (!cmp) return;
+  const table = els.compareTable;
+  table.textContent = '';
+  const head = addEl(addEl(table, 'thead'), 'tr');
+  for (const h of ['Intervention', 'Cost', 'Peak stage', 'Depth drop', 'Passable km',
+    'Stranded zones', 'Cutoff', 'Avoided/$1M']) {
+    const th = addEl(head, 'th', null, h);
+    th.scope = 'col';
+  }
+  const body = addEl(table, 'tbody');
+  const best = bestInBudget(cmp, state.budgetM);
+  for (const row of cmp.rows) {
+    const tr = addEl(body, 'tr');
+    if (row.intervention && row.costM > state.budgetM) tr.className = 'dim';
+    if (row === best) tr.classList.add('best');
+    const name = addEl(tr, 'td', null, row.intervention?.label ?? 'Baseline, no intervention');
+    if (row === best) addEl(name, 'span', 'tag', 'best in budget');
+    addEl(tr, 'td', null, row.costM === 0 ? 'none' : `$${row.costM.toFixed(1)}M`);
+    addEl(tr, 'td', null, `${row.sim.peakStage.toFixed(2)} m`);
+    addEl(tr, 'td', null, row.intervention ? `${(row.stageDrop * 100).toFixed(0)} cm` : '-');
+    addEl(tr, 'td', null, row.intervention
+      ? `${row.passableKm.toFixed(2)} (+${row.passableDelta.toFixed(2)})`
+      : row.passableKm.toFixed(2));
+    const zones = row.strandedCount === 0 ? 'none'
+      : `${row.strandedCount}: ${row.stranded.map(labelOf).join(', ')}`;
+    addEl(tr, 'td', null, row.intervention
+      ? `${zones} (-${row.strandedReduction})` : zones);
+    addEl(tr, 'td', null, fmtCut(row.earliest));
+    addEl(tr, 'td', null, row.perMillion === null ? '-' : row.perMillion.toFixed(1));
+  }
+  const totalKm = (state.preset.graph.edges.reduce((sum, edge) => sum + edge.m, 0) / 1000).toFixed(2);
+  els.compareNote.textContent =
+    `${state.tierSpec.label} tier (rain scale x${state.tierSpec.scale}) measured at each run's own ` +
+    `peak minute under the ${IMPASSABLE_M.toFixed(2)} m vehicle impassability reference: baseline ` +
+    `keeps ${cmp.base.passableKm.toFixed(2)} of ${totalKm} km of road passable and strands ` +
+    `${cmp.base.strandedCount} of ${cmp.origins.length} zones. Severity tiers scale the invented ` +
+    `storm, not design return periods; costs, household counts, and unit rates are disclosed ` +
+    `planning-model constants, never measurements of a real place.`;
+}
+
+function renderCutoff() {
+  if (!state.matrix) return;
+  renderCutoffChart(els.cutoffSvg, state.matrix, state.minute, state.origin);
+  const table = els.alertMatrix;
+  table.textContent = '';
+  const head = addEl(addEl(table, 'thead'), 'tr');
+  for (const h of ['Zone', '0h', '1h', '2h', '3h', '4h', '5h', '6h', 'First cut', 'Last safe']) {
+    const th = addEl(head, 'th', null, h);
+    th.scope = 'col';
+  }
+  const body = addEl(table, 'tbody');
+  for (const row of state.matrix.rows) {
+    const tr = addEl(body, 'tr');
+    addEl(tr, 'td', null, row.label);
+    for (const cell of row.hourly) {
+      addEl(tr, 'td', cell === null ? '' : cell ? 'ok' : 'cut', cell === null ? '-' : cell ? 'dry' : 'cut');
+    }
+    addEl(tr, 'td', null, row.firstCut === null ? 'never' : `min ${row.firstCut}`);
+    addEl(tr, 'td', null, row.lastSafe === null ? 'none' : `min ${row.lastSafe}`);
+  }
+  const alerts = state.matrix.rows
+    .filter(row => row.firstCut !== null)
+    .map(row => `${row.label} at minute ${row.firstCut}`);
+  els.cutoffNote.textContent =
+    `Each strip answers whether a ${state.mode === 'car' ? 'car' : 'person on foot'} leaving ` +
+    `that zone at a storm minute can still reach a shelter on roads that stay dry for the whole ` +
+    `trip. Pre-evacuation alerts must land before a zone's first failed departure` +
+    `${alerts.length ? ` (${alerts.join('; ')})` : ''}. Click a strip to jump there.`;
+}
+
 function setPlaying(on) {
   state.playing = on;
   els.play.textContent = on ? 'Pause' : 'Play';
@@ -278,13 +440,17 @@ els.origin.addEventListener('change', () => {
   state.compare = compareScenario(state.model, state.origin, state.mode);
   renderMetrics();
   renderMinute();
+  renderCutoff();
 });
 
 els.mode.addEventListener('change', () => {
   state.mode = els.mode.value;
   state.compare = compareScenario(state.model, state.origin, state.mode);
+  state.matrix = cutoffMatrix(state.preset.graph, state.model.active, originNodes(), state.mode,
+    { raise: state.model.raise });
   renderMetrics();
   renderMinute();
+  renderCutoff();
 });
 
 els.minute.addEventListener('input', () => {
@@ -364,6 +530,94 @@ els.exportJson.addEventListener('click', async () => {
   }
 });
 
+els.intensity.addEventListener('input', () => {
+  state.intensity = Number(els.intensity.value) / 100;
+  syncTierUi();
+  computeAnalysis();
+});
+
+els.budget.addEventListener('input', () => {
+  state.budgetM = Number(els.budget.value) / 10;
+  syncTierUi();
+  renderComparator();
+});
+
+els.cutoffSvg.addEventListener('click', event => {
+  const row = event.target.closest('[data-origin]');
+  const id = row?.dataset?.origin;
+  if (!id || !originNodes().includes(id)) return;
+  state.origin = id;
+  els.origin.value = id;
+  state.compare = compareScenario(state.model, state.origin, state.mode);
+  renderMetrics();
+  const cut = state.matrix?.rows.find(item => item.origin === id)?.firstCut;
+  if (cut !== null && cut !== undefined) setMinute(cut);
+  else renderMinute();
+  renderCutoff();
+});
+
+function currentPayload() {
+  return briefPayload({
+    model: state.model,
+    tierLabel: state.tierSpec.label,
+    scale: state.tierSpec.scale,
+    comparison: state.comparison,
+    matrix: state.matrix,
+    budgetM: state.budgetM,
+  });
+}
+
+for (const [el, build] of [
+  [els.briefJson, () => ['floodline-brief.json', briefDocument(currentPayload()), 'application/json']],
+  [els.briefCsv, () => ['floodline-brief.csv', briefCSV(state.comparison, state.tierSpec.label), 'text/csv;charset=utf-8']],
+  [els.briefMd, () => ['floodline-brief.md', briefMarkdown(currentPayload()), 'text/markdown;charset=utf-8']],
+]) {
+  el.addEventListener('click', () => {
+    try {
+      const [name, text, type] = build();
+      download(name, text, type);
+      els.exportError.hidden = true;
+    } catch (error) {
+      showExportError(error);
+    }
+  });
+}
+
+els.bookmark.addEventListener('click', () => {
+  const hash = encodeScenarioHash({
+    preset: state.preset.id,
+    origin: state.origin,
+    mode: state.mode,
+    minute: state.minute,
+    mitigations: state.mitigations,
+    tier: state.intensity === null ? state.tier : 'custom',
+    intensity: state.intensity,
+    budgetM: state.budgetM,
+    edits: state.edits,
+  });
+  history.replaceState(null, '', hash);
+  els.bookmarkUrl.value = window.location.href;
+});
+
+els.verifyBtn.addEventListener('click', () => {
+  const result = verifyBriefDocument(els.verifyInput.value);
+  els.verifyResult.hidden = false;
+  els.verifyResult.classList.toggle('ok', result.ok);
+  els.verifyResult.textContent = result.ok
+    ? `Signature valid: SHA-256 ${result.sha256} matches the payload.`
+    : `Signature check failed: ${result.reason}.`;
+});
+
+els.selftest.addEventListener('click', () => {
+  const results = runSelfTests();
+  els.selftestList.textContent = '';
+  for (const result of results) {
+    const li = addEl(els.selftestList, 'li');
+    addEl(li, 'span', result.pass ? 'pass' : 'fail', `${result.pass ? 'PASS' : 'FAIL'}  ${result.name}`);
+    addEl(li, 'span', 'detail', result.detail);
+  }
+});
+
 document.addEventListener('keydown', event => {
   const action = shortcutAction(event, els.shortcuts.checked);
   if (!action) return;
@@ -381,10 +635,38 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+function applyBookmark(decoded) {
+  state.preset = PRESETS.find(p => p.id === decoded.preset) ?? state.preset;
+  populateOrigins();
+  state.edits = decoded.edits;
+  if (decoded.edits) {
+    els.rain.value = decoded.edits.rain.join(' ');
+    els.cn.value = String(decoded.edits.cn);
+    els.impervious.value = decoded.edits.impervious === null ? '' : String(decoded.edits.impervious);
+    els.blockage.value = String(decoded.edits.blockage);
+  }
+  state.mitigations = { ...decoded.mitigations };
+  els.pavement.checked = decoded.mitigations.pavement;
+  els.clear.checked = decoded.mitigations.clear;
+  els.bridge.checked = decoded.mitigations.bridge;
+  const valid = originNodes();
+  state.origin = valid.includes(decoded.origin) ? decoded.origin : 'school';
+  state.mode = decoded.mode;
+  state.minute = decoded.minute;
+  state.tier = decoded.tier === 'custom' ? 'custom' : decoded.tier;
+  state.intensity = decoded.tier === 'custom' ? decoded.intensity : null;
+  if (state.intensity !== null) els.intensity.value = String(Math.round(state.intensity * 100));
+  state.budgetM = decoded.budgetM;
+}
+
 populatePresets();
 populateOrigins();
 syncFormToPreset();
+const bookmark = decodeScenarioHash(window.location.hash, PRESETS);
+if (bookmark) applyBookmark(bookmark);
 els.preset.value = state.preset.id;
 els.origin.value = state.origin;
 els.mode.value = state.mode;
+renderTierButtons();
+syncTierUi();
 computeModel();
