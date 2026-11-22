@@ -2,3 +2,5 @@
 node_modules/
 scratch/
 *.log
+video/*.wav
+video/*.mp4

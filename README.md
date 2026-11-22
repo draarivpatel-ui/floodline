@@ -7,6 +7,8 @@ basin, compare a shortest route against a route that stays dry, and print a bili
 places, the roads, and the storm are invented, and the app issues no forecasts, warnings,
 or evacuation orders.
 
+**Live demo:** [https://aariv.me/floodline/](https://aariv.me/floodline/)
+
 ## Run
 
 ```
