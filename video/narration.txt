@@ -1,0 +1,11 @@
+FloodLine is an offline training workbench for flood evacuation reasoning. The basin, the roads, and the storm are invented, and the app issues no forecasts, warnings, or evacuation orders. Each rainfall bin runs through the TR-55 curve number relations into runoff, and Manning's equation turns the discharge into channel stage.
+
+At storm minute seventy-five the channel reads 2.09 meters, just over bankfull. The green modeled route from Cypress School to Ridge Shelter holds 59 centimeters of clearance, while the amber shortest route crosses the Canal Underpass, where water is already past the car reference. The model puts road closure at storm minute 84.7 and the departure cutoff at 80.6, about five and a half minutes out.
+
+Scrubbing forward, the flooded spread widens and the dry verdict only holds while every leg of the trip stays dry across the whole traversal window, not the snapshot alone. The counterfactual knobs recompute the run. Clearing drains restores clean-channel roughness, and raising the marked bridge lifts its deck by 0.65 meters.
+
+Switching to traveling on foot retimes the whole trip, since walking speed is a fixed model constant of 80 meters a minute. A route that is dry in the snapshot can still flood mid-trip, and the workbench says so instead of calling it verified.
+
+The family go-card condenses the exercise onto one printable page in English or Spanish, safety wording first, including the honest line that directions are withheld when a trip outlasts the run. Downloads write per-minute CSV telemetry, a GeoJSON route snapshot, and an audit JSON with a SHA-256 checksum.
+
+Two hundred eighty-seven tests pass over the runoff model, the routing verdicts, and the bilingual card. FloodLine teaches the two questions that matter, when it is too late to leave and which way stays dry.
