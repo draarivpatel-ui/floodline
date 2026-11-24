@@ -16,8 +16,10 @@ const chrome = spawn(process.env.CHROME_BIN || '/Applications/Google Chrome.app/
 const closed = once(chrome, 'close');
 let socket;
 const events = [];
+const CHECK_TIMEOUT_MS = Number(process.env.FLOODLINE_CHECK_TIMEOUT_MS || 6000);
+const CDP_TIMEOUT_MS = Number(process.env.FLOODLINE_CDP_TIMEOUT_MS || 8000);
 
-async function until(label, get, timeout = 6000) {
+async function until(label, get, timeout = CHECK_TIMEOUT_MS) {
   const end = Date.now() + timeout;
   do {
     const value = await get();
@@ -51,7 +53,7 @@ try {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`Chrome did not complete ${method}`));
-    }, 8000);
+    }, CDP_TIMEOUT_MS);
     pending.set(id, packet => {
       clearTimeout(timer);
       pending.delete(id);
@@ -130,6 +132,7 @@ try {
   assert.ok(await evaluate(`document.querySelectorAll('table tbody th[scope="row"]').length >= 3`));
   assert.equal(await evaluate(`Number(document.querySelector('#minute').value)`), 75);
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 1440);
+  assert.equal(await evaluate(`document.querySelectorAll('.table-wrap[tabindex="0"][role="region"][aria-label]').length`), 3);
   const initial = await text('#route-status');
   assert.doesNotMatch(initial, /unreachable/i);
   assert.match(await text('#map'), /Canal Underpass/);
@@ -313,6 +316,11 @@ try {
   await evaluate('window.scrollTo(0, 0)');
   assert.equal(await evaluate('innerWidth'), 390);
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
+  const touchTargets = await evaluate(`[...document.querySelectorAll('.mast-actions .btn, .timeline .btn, .tier-row .btn, #minute, #preset, #origin, #mode')]
+    .filter(el => el.getClientRects().length)
+    .map(el => ({ name: el.id || el.textContent.trim(), height: el.getBoundingClientRect().height }))`);
+  assert.ok(touchTargets.length >= 8, `expected mobile touch targets, saw ${touchTargets.length}`);
+  assert.ok(touchTargets.every(target => target.height >= 44), JSON.stringify(touchTargets));
   assert.equal(await evaluate(`document.querySelector('#settings').open`), false);
   assert.ok(await evaluate(`document.querySelector('#go-card').getBoundingClientRect().height >= 44`));
   assert.ok(await evaluate(`document.querySelector('#map').getBoundingClientRect().bottom < innerHeight`));
@@ -336,10 +344,12 @@ try {
   assert.ok(await evaluate(`document.querySelector('#card-dialog').open`));
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   await click('#card-close');
+  await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   await click('#buddy-open');
   assert.ok(await evaluate(`document.querySelector('#buddy-dialog').open`));
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   await click('#buddy-close');
+  await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
 
   await until('local scope is controlled by the offline worker', () => evaluate('Boolean(navigator.serviceWorker.controller)'), 8000);
   const onlineEvents = [...events];

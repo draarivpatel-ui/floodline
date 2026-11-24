@@ -86,8 +86,10 @@ card on one Letter page, English or Spanish.
   three-across.
 - Under 720px: the settings wrapper starts closed (script sets `open` by matchMedia) and
   the Scenario fieldset lays out two-across with the basin select on its own row.
-- At 390px: the masthead wraps, rail controls compact above the map, primary controls keep at least
-  44px touch height, and nothing clips horizontally (verified at 390x844).
+- At 390px: the masthead wraps, rail controls compact above the map, buttons, selects and sliders keep
+  at least 44px touch height, map place labels scale up while decorative microtype drops out, wide data
+  tables stay inside keyboard-reachable scroll regions, and nothing clips the page horizontally
+  (verified at 390x844).
 
 ## Interaction and accessibility
 

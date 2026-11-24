@@ -91,5 +91,6 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`FloodLine dev server at http://${host}:${port}/`);
+  const actual = server.address().port;
+  console.log(`FloodLine dev server at http://${host}:${actual}/`);
 });

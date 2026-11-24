@@ -39,6 +39,10 @@ export function renderMap(svg, model, view, origin, minute) {
   svg.textContent = '';
   svg.setAttribute('viewBox', '0 0 840 415');
   svg.setAttribute('role', 'img');
+  const renderedWidth = svg.getBoundingClientRect().width || 840;
+  const compact = renderedWidth < 520;
+  const typeScale = renderedWidth < 430 ? 1.8 : renderedWidth < 620 ? 1.35 : 1;
+  const type = value => Number((value * typeScale).toFixed(1));
   const title = el('title', {}, svg);
   title.textContent = 'Synthetic training basin map';
   const wetCount = graph.edges.filter(edge => (view.depths.get(edge.id) ?? 0) > 0).length;
@@ -129,15 +133,15 @@ export function renderMap(svg, model, view, origin, minute) {
     if (node.type === 'shelter') {
       el('circle', { cx: node.x, cy: node.y, r: 8, fill: '#123c3a', stroke: '#bdeba7', 'stroke-width': 2 }, places);
       el('path', { d: `M${node.x - 4},${node.y} h8 M${node.x},${node.y - 4} v8`, stroke: '#bdeba7', 'stroke-width': 2.4 }, places);
-      drawText(places, lx, node.y + 3.5, node.label, { 'font-size': 11.5, 'font-weight': 'bold', fill: '#d9f2c4', 'text-anchor': anchor });
+      drawText(places, lx, node.y + 3.5, node.label, { 'font-size': type(11.5), 'font-weight': 'bold', fill: '#d9f2c4', 'text-anchor': anchor });
     } else if (node.type === 'school') {
       el('line', { x1: node.x, y1: node.y, x2: node.x, y2: node.y - 13, stroke: '#e8efe6', 'stroke-width': 1.6 }, places);
       el('path', { d: `M${node.x},${node.y - 13} l9,3.4 l-9,3.4 Z`, fill: '#ffb279' }, places);
       el('circle', { cx: node.x, cy: node.y, r: 3, fill: '#e8efe6' }, places);
-      drawText(places, lx, node.y + 15, node.label, { 'font-size': 10.5, fill: '#e8efe6', 'text-anchor': anchor });
+      drawText(places, lx, node.y + 15, node.label, { 'font-size': type(10.5), fill: '#e8efe6', 'text-anchor': anchor });
     } else if (node.type === 'home') {
       el('path', { d: `M${node.x - 6},${node.y + 1} l6,-6 l6,6 v6 h-12 Z`, fill: '#dce8dd', stroke: '#112f31', 'stroke-width': 1 }, places);
-      drawText(places, lx, node.y + 4, node.label, { 'font-size': 10.5, fill: '#e8efe6', 'text-anchor': anchor });
+      drawText(places, lx, node.y + 4, node.label, { 'font-size': type(10.5), fill: '#e8efe6', 'text-anchor': anchor });
     }
   }
   const roadLabels = el('g', {}, svg);
@@ -147,7 +151,7 @@ export function renderMap(svg, model, view, origin, minute) {
     const a = nodes.get(edge.a);
     const b = nodes.get(edge.b);
     drawText(roadLabels, (a.x + b.x) / 2, (a.y + b.y) / 2 - 10, edge.label, {
-      'font-size': 12, fill: color, 'text-anchor': 'middle',
+      'font-size': type(12), fill: color, 'text-anchor': 'middle',
       'paint-order': 'stroke', stroke: '#112f31', 'stroke-width': 3,
     });
   }
@@ -156,39 +160,43 @@ export function renderMap(svg, model, view, origin, minute) {
   if (originNode) {
     el('circle', { cx: originNode.x, cy: originNode.y, r: 13, fill: 'none', stroke: '#bdeba7', 'stroke-width': 2.2, 'stroke-dasharray': '3 3' }, places);
     drawText(places, originNode.x, originNode.y - 20, 'START', {
-      'font-size': 9, 'font-weight': 'bold', fill: '#bdeba7', 'text-anchor': 'middle', 'letter-spacing': '0.16em',
+      'font-size': type(9), 'font-weight': 'bold', fill: '#bdeba7', 'text-anchor': 'middle', 'letter-spacing': '0.16em',
     });
   }
 
-  const legend = el('g', { 'aria-hidden': 'true' }, svg);
-  el('rect', { x: 12, y: 12, width: 168, height: 88, fill: '#0c302f', stroke: '#3d6a5f', 'stroke-width': 1, opacity: 0.92 }, legend);
-  const legendRows = [
-    ['#bdeba7', 'none', 4.4, 'Dry modeled route'],
-    ['#efdfae', '4 4', 2.2, 'Shortest route'],
-    ['#ffb279', '7 4', 3.2, 'Flooded road'],
-    ['#409eaa', 'none', 4.4, 'Channel'],
-  ];
-  legendRows.forEach(([color, dash, width, label], i) => {
-    const y = 28 + i * 19;
-    el('line', { x1: 22, y1: y, x2: 50, y2: y, stroke: color, 'stroke-width': width, 'stroke-dasharray': dash, 'stroke-linecap': 'round' }, legend);
-    drawText(legend, 58, y + 3.5, label, { 'font-size': 10, fill: '#dce8dd' });
-  });
+  if (!compact) {
+    const legend = el('g', { 'aria-hidden': 'true' }, svg);
+    el('rect', { x: 12, y: 12, width: 168, height: 88, fill: '#0c302f', stroke: '#3d6a5f', 'stroke-width': 1, opacity: 0.92 }, legend);
+    const legendRows = [
+      ['#bdeba7', 'none', 4.4, 'Dry modeled route'],
+      ['#efdfae', '4 4', 2.2, 'Shortest route'],
+      ['#ffb279', '7 4', 3.2, 'Flooded road'],
+      ['#409eaa', 'none', 4.4, 'Channel'],
+    ];
+    legendRows.forEach(([color, dash, width, label], i) => {
+      const y = 28 + i * 19;
+      el('line', { x1: 22, y1: y, x2: 50, y2: y, stroke: color, 'stroke-width': width, 'stroke-dasharray': dash, 'stroke-linecap': 'round' }, legend);
+      drawText(legend, 58, y + 3.5, label, { 'font-size': 10, fill: '#dce8dd' });
+    });
+  }
 
   const ornament = el('g', { 'aria-hidden': 'true' }, svg);
   drawText(ornament, 828, 24, 'N', { 'font-size': 12, 'font-weight': 'bold', fill: '#9db4a6', 'text-anchor': 'end' });
   el('path', { d: 'M822,32 l6,-14 l6,14 l-6,-4 Z', fill: '#9db4a6', transform: 'translate(-6 6)' }, ornament);
-  const barY = 398;
-  el('line', { x1: 700, y1: barY, x2: 750, y2: barY, stroke: '#9db4a6', 'stroke-width': 3 }, ornament);
-  for (const [x, label] of [[700, '0'], [725, '100'], [750, '200 m']]) {
-    el('line', { x1: x, y1: barY - 4, x2: x, y2: barY + 4, stroke: '#9db4a6', 'stroke-width': 1.4 }, ornament);
-    drawText(ornament, x, barY - 8, label, { 'font-size': 9, fill: '#9db4a6', 'text-anchor': 'middle', 'font-family': MONO_FONT });
+  if (!compact) {
+    const barY = 398;
+    el('line', { x1: 700, y1: barY, x2: 750, y2: barY, stroke: '#9db4a6', 'stroke-width': 3 }, ornament);
+    for (const [x, label] of [[700, '0'], [725, '100'], [750, '200 m']]) {
+      el('line', { x1: x, y1: barY - 4, x2: x, y2: barY + 4, stroke: '#9db4a6', 'stroke-width': 1.4 }, ornament);
+      drawText(ornament, x, barY - 8, label, { 'font-size': 9, fill: '#9db4a6', 'text-anchor': 'middle', 'font-family': MONO_FONT });
+    }
+    drawText(ornament, 650, 398, 'SYNTHETIC TRAINING BASIN', {
+      'font-size': 8.5, fill: '#5d8276', 'text-anchor': 'end', 'letter-spacing': '0.2em',
+    });
+    drawText(ornament, 12, 404, `storm minute ${Math.round(minute)}`, {
+      'font-size': 9, fill: '#5d8276', 'font-family': MONO_FONT,
+    });
   }
-  drawText(ornament, 650, 398, 'SYNTHETIC TRAINING BASIN', {
-    'font-size': 8.5, fill: '#5d8276', 'text-anchor': 'end', 'letter-spacing': '0.2em',
-  });
-  drawText(ornament, 12, 404, `storm minute ${Math.round(minute)}`, {
-    'font-size': 9, fill: '#5d8276', 'font-family': MONO_FONT,
-  });
 }
 
 function niceCeil(value) {

@@ -845,6 +845,15 @@ document.addEventListener('keydown', event => {
 els.settings.open = !window.matchMedia('(max-width: 720px)').matches;
 els.downloadJump.addEventListener('click', () => { els.settings.open = true; });
 
+let resizeFrame = 0;
+window.addEventListener('resize', () => {
+  if (resizeFrame) return;
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0;
+    renderMinute();
+  });
+});
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});

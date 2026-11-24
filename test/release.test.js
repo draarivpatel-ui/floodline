@@ -39,7 +39,7 @@ test('every src module is served by the dev server allowlist', () => {
 });
 
 test('the service worker version advanced with the new shell', () => {
-  assert.match(sw, /const VERSION = `\$\{PREFIX\}v7`;/, 'expected the v7 cache version');
+  assert.match(sw, /const VERSION = `\$\{PREFIX\}v8`;/, 'expected the v8 cache version');
 });
 
 test('every element id app.js looks up exists in index.html', () => {
