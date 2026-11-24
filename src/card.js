@@ -1,11 +1,29 @@
 export const LANGUAGES = ['en', 'es'];
 
+const DIALOG_TEXT = {
+  en: {
+    title: 'Family go-card', language: 'Language', languages: { en: 'English', es: 'Español' },
+    copy: 'Copy text', print: 'Print card', close: 'Close', plainText: 'Plain text for SMS or WhatsApp',
+    copied: 'Go-card text copied.', copyBlocked: 'Copy blocked. The go-card text is selected for manual copying.',
+  },
+  es: {
+    title: 'Tarjeta familiar', language: 'Idioma', languages: { en: 'English', es: 'Español' },
+    copy: 'Copiar texto', print: 'Imprimir tarjeta', close: 'Cerrar', plainText: 'Texto sin formato para SMS o WhatsApp',
+    copied: 'Texto de la tarjeta copiado.', copyBlocked: 'Copia bloqueada. El texto de la tarjeta está seleccionado para copiarlo manualmente.',
+  },
+};
+
+export function cardDialogText(language) {
+  return DIALOG_TEXT[LANGUAGES.includes(language) ? language : 'en'];
+}
+
 const TEXT = {
   en: {
     title: 'Family evacuation card',
     training: 'TRAINING EXERCISE ONLY',
     from: 'From',
     to: 'To',
+    route: 'Route',
     statusDry: 'DRY ROUTE AT STORM MINUTE',
     statusWetTrip: 'NO USABLE TRIP AT STORM MINUTE',
     statusUnverified: 'UNVERIFIED TRIP AT STORM MINUTE',
@@ -26,6 +44,7 @@ const TEXT = {
     training: 'SOLO PARA PRÁCTICA',
     from: 'Desde',
     to: 'Hacia',
+    route: 'Ruta',
     statusDry: 'RUTA SECA EN EL MINUTO',
     statusWetTrip: 'SIN TRAYECTO ÚTIL EN EL MINUTO',
     statusUnverified: 'TRAYECTO SIN VERIFICAR EN EL MINUTO',
@@ -101,6 +120,24 @@ function add(parent, tag, className, text) {
   if (text != null) el.textContent = text;
   parent.appendChild(el);
   return el;
+}
+
+// Plain-text export for SMS, WhatsApp or a printed fridge copy.
+export function cardText(card) {
+  const t = TEXT[card.lang] ?? TEXT.en;
+  const lines = [
+    `${card.title.toUpperCase()} - ${card.training}`,
+    card.status,
+  ];
+  if (card.cutoff) lines.push(card.cutoff);
+  lines.push(`${t.from}: ${card.origin}`);
+  if (card.shelter) lines.push(`${t.to}: ${card.shelter}`);
+  if (card.legs.length) {
+    lines.push(`${t.route}:`);
+    for (const [index, leg] of card.legs.entries()) lines.push(`${index + 1}. ${leg}`);
+  }
+  lines.push(card.warning);
+  return lines.join('\n');
 }
 
 // Builds the printable card with textContent only; no markup from model data.

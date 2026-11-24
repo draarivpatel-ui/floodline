@@ -6,6 +6,52 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>FloodLine - synthetic flood evacuation workbench</title>
+<meta name="description" content="An offline synthetic flood-evacuation training workbench with hydrology, routing, mitigation tradeoffs, bilingual go-cards and signed exports.">
+<meta name="theme-color" content="#f4f1e7">
+<link rel="canonical" href="https://aariv.me/floodline/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://aariv.me/floodline/">
+<meta property="og:title" content="FloodLine - synthetic flood evacuation workbench">
+<meta property="og:description" content="Practice when it is too late to leave and which route stays dry in a fictional basin. Offline, bilingual where it counts, and openly synthetic.">
+<meta property="og:image" content="https://aariv.me/floodline/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FloodLine dark survey-style basin map with route, hydrograph and cutoff training panels">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FloodLine - synthetic flood evacuation workbench">
+<meta name="twitter:description" content="An offline fictional-basin training workbench for flood-evacuation reasoning.">
+<meta name="twitter:image" content="https://aariv.me/floodline/og-image.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "FloodLine",
+      "url": "https://aariv.me/floodline/",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Any modern web browser",
+      "browserRequirements": "Requires JavaScript and ES modules; runs fully offline after first load",
+      "description": "An offline synthetic flood-evacuation training workbench with hydrology, routing, mitigation tradeoffs, bilingual printable cards and signed exports.",
+      "inLanguage": ["en", "es"],
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "license": "https://opensource.org/licenses/MIT",
+      "codeRepository": "https://github.com/draarivpatel-ui/floodline"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "FloodLine synthetic evacuation workbench",
+      "url": "https://aariv.me/floodline/",
+      "learningResourceType": "interactive simulation",
+      "educationalLevel": "secondary school",
+      "teaches": ["flood safety reasoning", "rainfall runoff", "evacuation cutoff timing", "mitigation tradeoffs", "mutual-aid planning"],
+      "inLanguage": ["en", "es"],
+      "isAccessibleForFree": true
+    }
+  ]
+}
+</script>
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./styles.css">
 </head>
@@ -227,16 +273,22 @@
 <dialog id="card-dialog" aria-labelledby="card-dialog-title">
   <div class="card-toolbar">
     <span id="card-dialog-title" class="group-label">Family go-card</span>
-    <label class="field inline" for="card-language">Language
+    <label class="field inline" for="card-language"><span id="card-language-label">Language</span>
       <select id="card-language">
         <option value="en">English</option>
         <option value="es">Español</option>
       </select>
     </label>
+    <button class="btn small" id="card-copy" type="button">Copy text</button>
     <button class="btn small" id="card-print" type="button">Print card</button>
     <button class="btn small" id="card-close" type="button">Close</button>
   </div>
+  <p class="sr-only" role="status" aria-live="polite" id="card-status"></p>
   <div id="card-paper" class="card-paper"></div>
+  <details class="card-text-block">
+    <summary id="card-text-summary">Plain text for SMS or WhatsApp</summary>
+    <textarea id="card-text" rows="9" readonly spellcheck="false" aria-label="Plain text for SMS or WhatsApp"></textarea>
+  </details>
 </dialog>
 
 <dialog id="buddy-dialog" aria-labelledby="buddy-dialog-title">
@@ -252,6 +304,7 @@
     <button class="btn small" id="buddy-print" type="button">Print card</button>
     <button class="btn small" id="buddy-close" type="button">Close</button>
   </div>
+  <p class="sr-only" role="status" aria-live="polite" id="buddy-status"></p>
   <div id="buddy-paper" class="card-paper"></div>
   <details class="buddy-text-block">
     <summary id="buddy-text-summary">Plain text for SMS or WhatsApp</summary>
@@ -259,6 +312,7 @@
   </details>
 </dialog>
 
+<div class="sr-only" id="announcer" role="status" aria-live="polite"></div>
 <script type="module" src="./src/app.js"></script>
 </body>
 </html>

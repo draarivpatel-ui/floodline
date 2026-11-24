@@ -30,8 +30,8 @@ storm, read a verdict, and take a card home.
 - **Honest exports.** CSV telemetry, a synthetic-coordinates GeoJSON snapshot, a SHA-256
   audit bundle over deterministic canonical JSON, and signed resilience briefs that verify
   and fail on any edit in-page; no timestamps, no local paths.
-- **Bilingual where it counts.** The app runs in English; the family go-card renders fully
-  in English or Spanish.
+- **Bilingual where it counts.** The app runs in English; the family go-card and neighborhood buddy
+  card render fully in English or Spanish, including their dialog controls and plain-text exports.
 
 ## Constraints
 

@@ -2,7 +2,7 @@ import { bounded, parseRain, simulate } from './hydrology.js';
 import { DEPTH_REFERENCES, isAboveReference } from './routing.js';
 import { PRESETS, buildScenario, compareScenario, inspectScenario } from './presets.js';
 import { auditBundle, canonicalJSON, routeGeoJSON, telemetryCSV } from './exports.js';
-import { cardModel, renderCard } from './card.js';
+import { cardDialogText, cardModel, cardText, renderCard } from './card.js';
 import { shortcutAction } from './controls.js';
 import { renderCutoffChart, renderHydrograph, renderMap } from './viz.js';
 import { IMPASSABLE_M, STORM_TIERS, bestInBudget, compareTier, tieredInput } from './mitigation.js';
@@ -22,6 +22,7 @@ const els = {
   play: $('play'), prev: $('prev'), next: $('next'), peak: $('peak'),
   goCard: $('go-card'), dialog: $('card-dialog'), cardLang: $('card-language'),
   cardPaper: $('card-paper'), cardPrint: $('card-print'), cardClose: $('card-close'),
+  cardCopy: $('card-copy'), cardText: $('card-text'), cardStatus: $('card-status'), cardSummary: $('card-text-summary'), cardTitle: $('card-dialog-title'), cardLanguageLabel: $('card-language-label'),
   stageNow: $('stage-now'), routeStatus: $('route-status'),
   map: $('map'), hydro: $('hydrograph'), hydroStats: $('hydro-stats'), metrics: $('metrics'),
   form: $('edit-form'), rain: $('custom-rain'), cn: $('cn'), impervious: $('impervious'),
@@ -37,13 +38,13 @@ const els = {
   buddyNote: $('buddy-note'), buddyTable: $('buddy-table'), buddyOpen: $('buddy-open'),
   buddyDialog: $('buddy-dialog'), buddyLang: $('buddy-language'), buddyPaper: $('buddy-paper'),
   buddyText: $('buddy-text'), buddyCopy: $('buddy-copy'), buddyPrint: $('buddy-print'),
-  buddyClose: $('buddy-close'),
+  buddyClose: $('buddy-close'), buddyStatus: $('buddy-status'),
   buddyTitle: $('buddy-dialog-title'), buddyLanguageLabel: $('buddy-language-label'),
   buddySummary: $('buddy-text-summary'),
   briefJson: $('export-brief-json'), briefCsv: $('export-brief-csv'), briefMd: $('export-brief-md'),
   bookmark: $('bookmark'), bookmarkUrl: $('bookmark-url'),
   verifyInput: $('verify-input'), verifyBtn: $('verify-btn'), verifyResult: $('verify-result'),
-  selftest: $('selftest'), selftestList: $('selftest-list'),
+  selftest: $('selftest'), selftestList: $('selftest-list'), announcer: $('announcer'),
 };
 
 const MODE_LABEL = { car: 'by car', pedestrian: 'on foot' };
@@ -83,6 +84,16 @@ function addRow(dl, term, def) {
   const row = addEl(dl, 'div', 'data-row');
   addEl(row, 'dt', null, term);
   addEl(row, 'dd', null, def);
+}
+
+function announce(message, target = els.announcer) {
+  if (!target) return;
+  target.textContent = '';
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => { target.textContent = message; });
+  } else {
+    target.textContent = message;
+  }
 }
 
 function download(name, text, type) {
@@ -338,6 +349,7 @@ function renderBuddyPanel() {
     `last safe minutes above set the check-in deadline on the buddy card.`;
   const table = els.buddyTable;
   table.textContent = '';
+  addEl(table, 'caption', 'sr-only', 'Neighborhood buddy assignments with households, cutoff times and buddy zone controls');
   const head = addEl(addEl(table, 'thead'), 'tr');
   for (const h of ['Zone', 'Households', 'First cut', 'Last safe', 'Buddy zone']) {
     const th = addEl(head, 'th', null, h);
@@ -347,7 +359,8 @@ function renderBuddyPanel() {
   const origins = originNodes();
   for (const row of state.matrix.rows) {
     const tr = addEl(body, 'tr');
-    addEl(tr, 'td', null, row.label);
+    const zoneHead = addEl(tr, 'th', null, row.label);
+    zoneHead.scope = 'row';
     addEl(tr, 'td', null, String(row.households));
     addEl(tr, 'td', null, row.firstCut === null ? 'never' : `min ${row.firstCut}`);
     addEl(tr, 'td', null, row.lastSafe === null ? 'none' : `min ${row.lastSafe}`);
@@ -381,6 +394,7 @@ function renderTierButtons() {
       state.intensity = null;
       syncTierUi();
       computeAnalysis();
+      announce(`Storm tier changed to ${tier.label}.`);
     });
   }
   const custom = addEl(els.tierRow, 'button', 'btn small', 'Custom');
@@ -390,6 +404,7 @@ function renderTierButtons() {
     state.intensity = Number(els.intensity.value) / 100;
     syncTierUi();
     computeAnalysis();
+    announce('Custom storm intensity selected.');
   });
 }
 
@@ -410,6 +425,7 @@ function renderComparator() {
   if (!cmp) return;
   const table = els.compareTable;
   table.textContent = '';
+  addEl(table, 'caption', 'sr-only', 'Storm tier mitigation comparison by intervention, cost, stage, passable roads, stranded zones, cutoff and cost effectiveness');
   const head = addEl(addEl(table, 'thead'), 'tr');
   for (const h of ['Intervention', 'Cost', 'Peak stage', 'Depth drop', 'Passable km',
     'Stranded zones', 'Cutoff', 'Avoided/$1M']) {
@@ -422,7 +438,8 @@ function renderComparator() {
     const tr = addEl(body, 'tr');
     if (row.intervention && row.costM > state.budgetM) tr.className = 'dim';
     if (row === best) tr.classList.add('best');
-    const name = addEl(tr, 'td', null, row.intervention?.label ?? 'Baseline, no intervention');
+    const name = addEl(tr, 'th', null, row.intervention?.label ?? 'Baseline, no intervention');
+    name.scope = 'row';
     if (row === best) addEl(name, 'span', 'tag', 'best in budget');
     addEl(tr, 'td', null, row.costM === 0 ? 'none' : `$${row.costM.toFixed(1)}M`);
     addEl(tr, 'td', null, `${row.sim.peakStage.toFixed(2)} m`);
@@ -449,9 +466,12 @@ function renderComparator() {
 
 function renderCutoff() {
   if (!state.matrix) return;
+  els.cutoffSvg.tabIndex = 0;
+  els.cutoffSvg.setAttribute('aria-label', 'Evacuation cutoff chart. Use left and right arrow keys to change the starting zone. Press Enter to jump to its first cutoff minute.');
   renderCutoffChart(els.cutoffSvg, state.matrix, state.minute, state.origin);
   const table = els.alertMatrix;
   table.textContent = '';
+  addEl(table, 'caption', 'sr-only', 'Hourly evacuation cutoff matrix by zone with first failed departure and last safe departure');
   const head = addEl(addEl(table, 'thead'), 'tr');
   for (const h of ['Zone', '0h', '1h', '2h', '3h', '4h', '5h', '6h', 'First cut', 'Last safe']) {
     const th = addEl(head, 'th', null, h);
@@ -460,7 +480,8 @@ function renderCutoff() {
   const body = addEl(table, 'tbody');
   for (const row of state.matrix.rows) {
     const tr = addEl(body, 'tr');
-    addEl(tr, 'td', null, row.label);
+    const zoneHead = addEl(tr, 'th', null, row.label);
+    zoneHead.scope = 'row';
     for (const cell of row.hourly) {
       addEl(tr, 'td', cell === null ? '' : cell ? 'ok' : 'cut', cell === null ? '-' : cell ? 'dry' : 'cut');
     }
@@ -475,7 +496,7 @@ function renderCutoff() {
     `whether a ${state.mode === 'car' ? 'car' : 'person on foot'} leaving ` +
     `that zone at a storm minute can still reach a shelter on roads that stay dry for the whole ` +
     `trip. Pre-evacuation alerts must land before a zone's first failed departure` +
-    `${alerts.length ? ` (${alerts.join('; ')})` : ''}. Click a strip to jump there.`;
+    `${alerts.length ? ` (${alerts.join('; ')})` : ''}. Click a strip to jump there, or focus the chart and use the arrow keys.`;
 }
 
 function setPlaying(on) {
@@ -489,12 +510,33 @@ function setPlaying(on) {
   }
 }
 
+function renderGoCard() {
+  const card = cardModel(
+    state.model, state.minute, state.origin, state.mode, state.view, els.cardLang.value,
+  );
+  renderCard(els.cardPaper, card);
+  els.cardText.value = cardText(card);
+  const labels = cardDialogText(card.lang);
+  els.dialog.lang = card.lang;
+  els.cardText.lang = card.lang;
+  els.cardTitle.textContent = labels.title;
+  for (const option of els.cardLang.querySelectorAll('option')) {
+    option.textContent = labels.languages[option.value];
+    option.lang = option.value;
+  }
+  els.cardLanguageLabel.textContent = labels.language;
+  els.cardCopy.textContent = labels.copy;
+  els.cardPrint.textContent = labels.print;
+  els.cardClose.textContent = labels.close;
+  els.cardSummary.textContent = labels.plainText;
+  els.cardText.setAttribute('aria-label', labels.plainText);
+}
+
 function openCard() {
   setPlaying(false);
-  renderCard(els.cardPaper, cardModel(
-    state.model, state.minute, state.origin, state.mode, state.view, els.cardLang.value,
-  ));
+  renderGoCard();
   if (!els.dialog.open) els.dialog.showModal();
+  els.cardLang.focus();
 }
 
 function renderBuddyCard() {
@@ -516,7 +558,7 @@ function renderBuddyCard() {
   els.buddyLanguageLabel.textContent = labels.language;
   for (const option of els.buddyLang.querySelectorAll('option')) {
     option.textContent = labels.languages[option.value];
-    option.lang = card.lang;
+    option.lang = option.value;
   }
   els.buddyCopy.textContent = labels.copy;
   els.buddyPrint.textContent = labels.print;
@@ -527,8 +569,10 @@ function renderBuddyCard() {
 
 function openBuddy() {
   setPlaying(false);
+  flushIntensity();
   renderBuddyCard();
   if (!els.buddyDialog.open) els.buddyDialog.showModal();
+  els.buddyLang.focus();
 }
 
 els.preset.addEventListener('change', () => {
@@ -540,6 +584,7 @@ els.preset.addEventListener('change', () => {
   state.minute = state.preset.demoMinute;
   syncFormToPreset();
   computeModel();
+  announce(`Training basin changed to ${state.preset.label}.`);
 });
 
 els.origin.addEventListener('change', () => {
@@ -548,6 +593,7 @@ els.origin.addEventListener('change', () => {
   renderMetrics();
   renderMinute();
   renderCutoff();
+  announce(`Starting point changed to ${labelOf(state.origin)}.`);
 });
 
 els.mode.addEventListener('change', () => {
@@ -558,6 +604,7 @@ els.mode.addEventListener('change', () => {
   renderMinute();
   renderCutoff();
   renderBuddyPanel();
+  announce(`Travel mode changed to ${state.mode === 'car' ? 'car' : 'on foot'}.`);
 });
 
 els.minute.addEventListener('input', () => {
@@ -594,26 +641,38 @@ for (const [el, key] of [[els.pavement, 'pavement'], [els.clear, 'clear'], [els.
 }
 
 els.goCard.addEventListener('click', openCard);
-els.cardLang.addEventListener('change', () => {
-  renderCard(els.cardPaper, cardModel(
-    state.model, state.minute, state.origin, state.mode, state.view, els.cardLang.value,
-  ));
-});
+els.cardLang.addEventListener('change', renderGoCard);
 els.cardPrint.addEventListener('click', () => window.print());
 els.cardClose.addEventListener('click', () => els.dialog.close());
+els.dialog.addEventListener('close', () => els.goCard.focus());
+els.cardCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(els.cardText.value);
+    announce(cardDialogText(els.cardLang.value).copied, els.cardStatus);
+  } catch {
+    const block = els.cardText.closest('.card-text-block');
+    if (block) block.open = true;
+    els.cardText.focus();
+    els.cardText.select();
+    announce(cardDialogText(els.cardLang.value).copyBlocked, els.cardStatus);
+  }
+});
 
 els.buddyOpen.addEventListener('click', openBuddy);
 els.buddyLang.addEventListener('change', renderBuddyCard);
 els.buddyPrint.addEventListener('click', () => window.print());
 els.buddyClose.addEventListener('click', () => els.buddyDialog.close());
+els.buddyDialog.addEventListener('close', () => els.buddyOpen.focus());
 els.buddyCopy.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(els.buddyText.value);
+    announce(buddyDialogText(els.buddyLang.value).copied, els.buddyStatus);
   } catch {
     const block = els.buddyText.closest('.buddy-text-block');
     if (block) block.open = true;
     els.buddyText.focus();
     els.buddyText.select();
+    announce(buddyDialogText(els.buddyLang.value).copyBlocked, els.buddyStatus);
   }
 });
 
@@ -652,11 +711,21 @@ els.exportJson.addEventListener('click', async () => {
   }
 });
 
+let intensityTimer = null;
 els.intensity.addEventListener('input', () => {
   state.intensity = Number(els.intensity.value) / 100;
   syncTierUi();
-  computeAnalysis();
+  if (typeof clearTimeout === 'function') clearTimeout(intensityTimer);
+  if (typeof setTimeout === 'function') intensityTimer = setTimeout(() => { intensityTimer = null; computeAnalysis(); }, 80);
+  else computeAnalysis();
 });
+
+function flushIntensity() {
+  if (intensityTimer === null) return;
+  if (typeof clearTimeout === 'function') clearTimeout(intensityTimer);
+  intensityTimer = null;
+  computeAnalysis();
+}
 
 els.budget.addEventListener('input', () => {
   state.budgetM = Number(els.budget.value) / 10;
@@ -664,18 +733,40 @@ els.budget.addEventListener('input', () => {
   renderComparator();
 });
 
-els.cutoffSvg.addEventListener('click', event => {
-  const row = event.target.closest('[data-origin]');
-  const id = row?.dataset?.origin;
+function selectCutoffOrigin(id, jumpToCut = true) {
   if (!id || !originNodes().includes(id)) return;
   state.origin = id;
   els.origin.value = id;
   state.compare = compareScenario(state.model, state.origin, state.mode);
   renderMetrics();
   const cut = state.matrix?.rows.find(item => item.origin === id)?.firstCut;
-  if (cut !== null && cut !== undefined) setMinute(cut);
+  if (jumpToCut && cut !== null && cut !== undefined) setMinute(cut);
   else renderMinute();
   renderCutoff();
+  announce(`Starting point changed to ${labelOf(id)}.`);
+}
+
+els.cutoffSvg.addEventListener('click', event => {
+  const row = event.target.closest('[data-origin]');
+  selectCutoffOrigin(row?.dataset?.origin);
+});
+
+els.cutoffSvg.addEventListener('keydown', event => {
+  const ids = originNodes();
+  if (!ids.length) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    const step = event.key === 'ArrowRight' ? 1 : -1;
+    const index = ids.indexOf(state.origin);
+    selectCutoffOrigin(ids[(index + step + ids.length) % ids.length], false);
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    const cut = state.matrix?.rows.find(item => item.origin === state.origin)?.firstCut;
+    if (cut !== null && cut !== undefined) {
+      setMinute(cut);
+      announce(`Jumped to the first cutoff minute for ${labelOf(state.origin)}.`);
+    }
+  }
 });
 
 function currentPayload() {
@@ -696,6 +787,7 @@ for (const [el, build] of [
 ]) {
   el.addEventListener('click', () => {
     try {
+      flushIntensity();
       const [name, text, type] = build();
       download(name, text, type);
       els.exportError.hidden = true;
@@ -706,6 +798,7 @@ for (const [el, build] of [
 }
 
 els.bookmark.addEventListener('click', () => {
+  flushIntensity();
   const hash = encodeScenarioHash({
     preset: state.preset.id,
     origin: state.origin,
@@ -719,6 +812,7 @@ els.bookmark.addEventListener('click', () => {
   });
   history.replaceState(null, '', hash);
   els.bookmarkUrl.value = window.location.href;
+  announce('Scenario bookmark link generated.');
 });
 
 els.verifyBtn.addEventListener('click', () => {

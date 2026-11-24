@@ -79,6 +79,11 @@ try {
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
   }
+  async function pressKey(key, code, keyCode) {
+    for (const type of ['rawKeyDown', 'keyUp']) {
+      await send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+    }
+  }
   async function setValue(selector, value, event) {
     await evaluate(`(() => {
       const target = ${visible(selector)};
@@ -118,6 +123,11 @@ try {
   await Promise.all(['Runtime', 'Page', 'Log', 'Network'].map(domain => send(`${domain}.enable`)));
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await navigate();
+  assert.equal(await evaluate(`document.querySelector('link[rel="canonical"]')?.href`), 'https://aariv.me/floodline/');
+  assert.equal(await evaluate(`document.querySelector('meta[property="og:image"]')?.content`), 'https://aariv.me/floodline/og-image.png');
+  assert.ok(await evaluate(`Boolean(document.querySelector('script[type="application/ld+json"]'))`));
+  assert.equal(await evaluate(`document.querySelectorAll('table caption.sr-only').length`), 3);
+  assert.ok(await evaluate(`document.querySelectorAll('table tbody th[scope="row"]').length >= 3`));
   assert.equal(await evaluate(`Number(document.querySelector('#minute').value)`), 75);
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 1440);
   const initial = await text('#route-status');
@@ -182,6 +192,11 @@ try {
   await click('#tier-row button[data-tier="t50"]');
   await until('50-yr comparator restored', () => evaluate(`/50-yr/.test(${visible('#compare-note')}.textContent)`));
 
+  await evaluate(`${visible('#cutoff-chart')}.focus()`);
+  await pressKey('ArrowRight', 'ArrowRight', 39);
+  await until('strip arrow key selects the next zone', () => evaluate(`${visible('#origin')}.value === 'homes'`));
+  await pressKey('ArrowLeft', 'ArrowLeft', 37);
+  await until('strip arrow key returns to school', () => evaluate(`${visible('#origin')}.value === 'school'`));
   await click('#cutoff-chart g[data-origin="homes"]');
   await until('strip click selects the homes zone', () => evaluate(`${visible('#origin')}.value === 'homes'`));
   assert.equal(await evaluate(`Number(${visible('#minute')}.value)`), 80);
@@ -277,14 +292,21 @@ try {
   await until('go-card dialog', () => evaluate(`document.querySelector('#card-dialog').open`));
   assert.match(await text('#card-paper'), /Cypress Rise/);
   assert.match(await text('#card-paper'), /High Bridge/);
+  assert.match(await evaluate(`${visible('#card-text')}.value`), /From: Cypress School/);
+  assert.equal(await evaluate(`${visible('#card-dialog-title')}.textContent`), 'Family go-card');
   await verifyPrint('en');
   await setValue('#card-language', 'es', 'change');
   assert.match(await text('#card-paper'), /Tarjeta familiar/i);
   assert.match(await text('#card-paper'), /Simulaci\u00f3n ficticia/i);
+  assert.match(await evaluate(`${visible('#card-text')}.value`), /Desde: Cypress School/);
+  assert.match(await evaluate(`${visible('#card-text')}.value`), /Ruta:/);
+  assert.equal(await evaluate(`${visible('#card-dialog-title')}.textContent`), 'Tarjeta familiar');
+  assert.equal(await evaluate(`${visible('#card-copy')}.textContent`), 'Copiar texto');
   assert.doesNotMatch(await text('#card-paper ol li:first-child'), /^\s*1\./);
   await verifyPrint('es');
   await capture('evacuation.png');
   await click('#card-close');
+  await until('closing the card restores focus to its opener', () => evaluate(`document.activeElement?.id === 'go-card'`));
 
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await reload();
@@ -292,6 +314,7 @@ try {
   assert.equal(await evaluate('innerWidth'), 390);
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   assert.equal(await evaluate(`document.querySelector('#settings').open`), false);
+  assert.ok(await evaluate(`document.querySelector('#go-card').getBoundingClientRect().height >= 44`));
   assert.ok(await evaluate(`document.querySelector('#map').getBoundingClientRect().bottom < innerHeight`));
   for (const selector of ['#tier-row', '#cutoff-chart', '#alert-matrix', '#compare-table',
     '#buddy-table', '#selftest', '#verify-btn', '#verify-input']) {
@@ -335,7 +358,7 @@ try {
   assert.deepEqual(exceptions, []);
   assert.deepEqual(badResponses, []);
   assert.deepEqual(outgoing, []);
-  console.log('1440x900 and 390x844 pass; playback and rerouting, mitigation, storm tiers, budget cap, cutoff strips, self-tests, signed briefs, tamper check, bookmark replay, exports, both one-page cards, zero app errors, no external requests, and offline reload verified.');
+  console.log('1440x900 and 390x844 pass; playback and rerouting, mitigation, storm tiers, budget cap, keyboard cutoff strips, localized plain-text cards, self-tests, signed briefs, tamper check, bookmark replay, exports, both one-page cards, zero app errors, no external requests, and offline reload verified.');
 } finally {
   socket?.close();
   chrome.kill('SIGTERM');

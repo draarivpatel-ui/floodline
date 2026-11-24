@@ -238,6 +238,9 @@ test('front-end release preserves text hygiene and an offline-first security pol
   }
   const page = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(page, /connect-src 'none'/);
-  assert.doesNotMatch(page, /(?:src|href)="https?:\/\//);
+  const externalResources = [...page.matchAll(/<(?:script|img|link)[^>]+(?:src|href)="https?:\/\/[^"]+"[^>]*>/g)]
+    .map(match => match[0])
+    .filter(tag => !tag.includes('rel="canonical"'));
+  assert.deepEqual(externalResources, []);
   assert.match(page, /<h1[^>]*>\s*FloodLine\s*<\/h1>/);
 });

@@ -113,6 +113,26 @@ test('a custom assignment changes the pairing', () => {
   assert.equal(pairOf(card, 'Cypress School').buddy, 'Terrace Homes');
 });
 
+test('family go-card plain text mirrors the rendered language and omits unavailable route fields', () => {
+  const minute = model.preset.demoMinute;
+  const view = presets.inspectScenario(model, minute, 'school', 'car');
+  const en = card.cardModel(model, minute, 'school', 'car', view, 'en');
+  const enText = card.cardText(en);
+  assert.match(enText, /^FAMILY EVACUATION CARD - TRAINING EXERCISE ONLY/);
+  assert.match(enText, /From: Cypress School/);
+  assert.match(enText, /Never enter floodwater/);
+  assert.ok(!enText.includes('undefined'));
+  const es = card.cardModel(model, minute, 'school', 'car', view, 'es');
+  const esText = card.cardText(es);
+  assert.match(esText, /^TARJETA FAMILIAR DE EVACUACIÓN - SOLO PARA PRÁCTICA/);
+  assert.match(esText, /Nunca entre en aguas de inundación/);
+  assert.match(esText, /Desde: Cypress School/);
+  assert.match(esText, /Hacia: Ridge Shelter/);
+  assert.match(esText, /Ruta:/);
+  assert.equal(card.cardDialogText('es').copy, 'Copiar texto');
+  assert.equal(card.cardDialogText('xx').copy, 'Copy text');
+});
+
 test('the Spanish card is fully localized including the mode label', () => {
   const card = cardOf('es');
   assert.equal(card.lang, 'es');
@@ -354,7 +374,7 @@ test('Spanish dialog localizes its title, language selector, actions, expander a
     ['buddy-copy', 'Copiar texto'], ['buddy-print', 'Imprimir tarjeta'], ['buddy-close', 'Cerrar'],
     ['buddy-text-summary', 'Texto sin formato para SMS o WhatsApp'],
   ]) assert.equal(ui.get(id).textContent, expected);
-  assert.deepEqual(ui.get('buddy-language').querySelectorAll('option').map(option => option.textContent), ['Inglés', 'Español']);
+  assert.deepEqual(ui.get('buddy-language').querySelectorAll('option').map(option => option.textContent), ['English', 'Español']);
   assert.equal(ui.get('buddy-dialog').lang, 'es');
   assert.equal(ui.get('buddy-text').lang, 'es');
   assert.equal(ui.get('buddy-text').attributes['aria-label'], 'Texto sin formato para SMS o WhatsApp');

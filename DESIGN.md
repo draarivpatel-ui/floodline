@@ -71,8 +71,9 @@ count and whether a dry route is available, never any safety approval.
 
 ## The go-card
 
-A `<dialog>` with a top toolbar (dialog label, language select, Print, Close) and a paper
-sheet inside. The card is set for print: serif title, a boxed `TRAINING EXERCISE ONLY` /
+A `<dialog>` with a top toolbar (dialog label, language select, Copy text, Print, Close) and a paper
+sheet inside. The toolbar and language-option labels localize with the card. A collapsed plain-text
+export mirrors the card for SMS or WhatsApp and is hidden from print. The card is set for print: serif title, a boxed `TRAINING EXERCISE ONLY` /
 `SOLO PARA PRÁCTICA` stamp, From/To lines, a monospace status line that names the travel
 mode on verified trips, the cutoff (floored to tenths and localized, never rounded up),
 a semantically numbered route-step list, and a bold warning footer that always ends with
@@ -85,8 +86,8 @@ card on one Letter page, English or Spanish.
   three-across.
 - Under 720px: the settings wrapper starts closed (script sets `open` by matchMedia) and
   the Scenario fieldset lays out two-across with the basin select on its own row.
-- At 390px: the masthead wraps, rail controls compact above the map, and nothing clips
-  horizontally (verified at 390x844).
+- At 390px: the masthead wraps, rail controls compact above the map, primary controls keep at least
+  44px touch height, and nothing clips horizontally (verified at 390x844).
 
 ## Interaction and accessibility
 
@@ -96,7 +97,9 @@ card on one Letter page, English or Spanish.
 - Validation is explicit: overrides apply through the Apply button with an inline
   `role="alert"` error and the last valid run preserved.
 - Keyboard shortcuts are off by default behind the `#shortcuts` checkbox and ignore
-  typing contexts, modifiers, repeats, and open dialogs.
+  typing contexts, modifiers, repeats, and open dialogs. The cutoff chart itself is focusable:
+  arrow keys move the starting zone and Enter jumps to its first cutoff minute. Dialog close returns
+  focus to its opener.
 - Reduced-motion media query kills transitions; playback never writes to live regions.
 - No smooth scrolling, no external requests, no icon fonts or emoji - the one glyph on
   the page is a hand-drawn SVG warning triangle in the notice.

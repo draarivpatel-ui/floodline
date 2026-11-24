@@ -1,7 +1,7 @@
 # FloodLine
 
 FloodLine is a small, offline, dependency-free training workbench for flood-evacuation
-reasoning. It lets a class or a family watch a synthetic storm raise water in a fictional
+reasoning. It is citable through canonical, OpenGraph, and educational JSON-LD metadata while keeping the project's deliberate noindex policy. It lets a class or a family watch a synthetic storm raise water in a fictional
 basin, compare a shortest route against a route that stays dry, weigh five invented
 mitigation interventions across severity tiers, see when each neighborhood's verified
 departure window closes and reopens, pair zones into a mutual-aid buddy plan, and print
@@ -129,11 +129,12 @@ package dependencies.
   drawn as SVG.
 - `src/exports.js`: CSV telemetry, GeoJSON route snapshot, and a SHA-256 audit bundle with
   canonical (key-sorted, deterministic) JSON serialization.
-- `src/card.js`: the bilingual go-card model and renderer.
+- `src/card.js`: the bilingual go-card model, renderer, dialog localization, and plain-text export.
 - `src/buddy.js`: the bilingual buddy-card model, nearest-zone pairing suggestion, and
   plain-text checklist export.
 - `src/controls.js`: opt-in keyboard shortcuts (P for play, G for the go-card).
-- `sw.js`: scoped service worker that precaches the local shell for offline use.
+- `sw.js`: scoped service worker that precaches the local shell, including the social image, for offline use.
+- `og-image.png`: local 1200x630 social-preview image referenced by the page metadata.
 - `tools/serve.mjs`: the zero-dependency dev server.
 - `tools/browser-check.mjs`: optional end-to-end verifier (requires Chrome and Node 22+).
 

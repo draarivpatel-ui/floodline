@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -39,7 +39,7 @@ test('every src module is served by the dev server allowlist', () => {
 });
 
 test('the service worker version advanced with the new shell', () => {
-  assert.match(sw, /const VERSION = `\$\{PREFIX\}v6`;/, 'expected the v6 cache version');
+  assert.match(sw, /const VERSION = `\$\{PREFIX\}v7`;/, 'expected the v7 cache version');
 });
 
 test('every element id app.js looks up exists in index.html', () => {
@@ -50,10 +50,47 @@ test('every element id app.js looks up exists in index.html', () => {
   }
 });
 
-test('the page never references an external origin', () => {
+test('the page never references an external origin for a loadable resource', () => {
   assert.ok(index.includes("connect-src 'none'"), 'CSP must forbid network connections');
-  const externals = [...index.matchAll(/(?:src|href)="(https?:)?\/\/[^"]+"/g)];
+  const externals = [...index.matchAll(/<(?:script|img|link)[^>]+(?:src|href)="(https?:)?\/\/[^"]+"[^>]*>/g)]
+    .map(match => match[0])
+    .filter(tag => !tag.includes('rel="canonical"'));
   assert.deepEqual(externals, []);
+});
+
+test('citable metadata includes canonical, OpenGraph and educational JSON-LD', () => {
+  assert.ok(index.includes('<link rel="canonical" href="https://aariv.me/floodline/">'));
+  assert.ok(index.includes('property="og:url" content="https://aariv.me/floodline/"'));
+  assert.ok(index.includes('property="og:image" content="https://aariv.me/floodline/og-image.png"'));
+  assert.ok(index.includes('name="twitter:card" content="summary_large_image"'));
+  assert.ok(index.includes('<meta name="robots" content="noindex, nofollow">'));
+  const ld = index.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  assert.ok(ld, 'JSON-LD block missing');
+  const data = JSON.parse(ld[1]);
+  const software = data['@graph'].find(item => item['@type'] === 'SoftwareApplication');
+  assert.equal(software.name, 'FloodLine');
+  assert.equal(software.applicationCategory, 'EducationalApplication');
+  assert.deepEqual(software.inLanguage, ['en', 'es']);
+  assert.ok(data['@graph'].some(item => item['@type'] === 'LearningResource'));
+});
+
+test('the OpenGraph image is a real 1200 by 630 PNG in the offline shell', () => {
+  const bytes = readFileSync(join(root, 'og-image.png'));
+  assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(bytes.readUInt32BE(16), 1200);
+  assert.equal(bytes.readUInt32BE(20), 630);
+  assert.ok(statSync(join(root, 'og-image.png')).size > 1000);
+  assert.ok(shellEntries.includes('og-image.png'));
+  assert.ok(allowedEntries.includes('/og-image.png'));
+});
+
+test('the family card exposes localized chrome and a plain-text export', () => {
+  for (const id of ['card-copy', 'card-text', 'card-text-summary', 'card-language-label', 'announcer']) {
+    assert.ok(index.includes(`id="${id}"`), `#${id} missing`);
+  }
+  assert.match(app, /cardText\(card\)/);
+  assert.match(app, /cardDialogText\(card\.lang\)/);
+  assert.match(app, /card-copy/);
 });
 
 test('the comparator, timeline, buddy, and self-check panels exist in the page', () => {

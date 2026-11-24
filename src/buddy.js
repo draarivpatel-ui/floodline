@@ -5,11 +5,13 @@ const DIALOG_TEXT = {
     language: 'Language', languages: { en: 'English', es: 'Español' },
     copy: 'Copy text', print: 'Print card', close: 'Close',
     plainText: 'Plain text for SMS or WhatsApp',
+    copied: 'Buddy-card text copied.', copyBlocked: 'Copy blocked. The buddy-card text is selected for manual copying.',
   },
   es: {
-    language: 'Idioma', languages: { en: 'Inglés', es: 'Español' },
+    language: 'Idioma', languages: { en: 'English', es: 'Español' },
     copy: 'Copiar texto', print: 'Imprimir tarjeta', close: 'Cerrar',
     plainText: 'Texto sin formato para SMS o WhatsApp',
+    copied: 'Texto de la tarjeta copiado.', copyBlocked: 'Copia bloqueada. El texto de la tarjeta está seleccionado para copiarlo manualmente.',
   },
 };
 

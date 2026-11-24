@@ -25,6 +25,7 @@ const allowed = new Set([
   '/styles.css',
   '/sw.js',
   '/favicon.svg',
+  '/og-image.png',
   '/src/app.js',
   '/src/viz.js',
   '/src/exports.js',
