@@ -188,6 +188,33 @@ try {
   await setValue('#origin', 'school', 'change');
   await setValue('#minute', '75', 'input');
 
+  // Neighborhood buddy check-in: pairing table, bilingual card, copy and print.
+  assert.equal(await evaluate(`document.querySelectorAll('#buddy-table tbody tr').length`), 3);
+  assert.equal(await evaluate(`document.querySelectorAll('#buddy-table select').length`), 3);
+  assert.match(await text('#buddy-note'), /50-yr/);
+  assert.equal(await evaluate(`document.querySelector('#buddy-table tbody tr select').value`), 'homes');
+  await setValue('#buddy-table tbody tr select', 'gardens', 'change');
+  await click('#buddy-open');
+  await until('buddy dialog', () => evaluate(`document.querySelector('#buddy-dialog').open`));
+  assert.match(await text('#buddy-paper'), /Neighborhood buddy card/);
+  assert.match(await text('#buddy-paper'), /Cypress School <> Terrace Homes/);
+  assert.match(await text('#buddy-paper'), /storm minute 81/);
+  assert.match(await evaluate(`${visible('#buddy-text')}.value`), /NEIGHBORHOOD BUDDY CARD/);
+  await setValue('#buddy-language', 'es', 'change');
+  assert.match(await text('#buddy-paper'), /Tarjeta de apoyo entre vecinos/);
+  assert.match(await text('#buddy-paper'), /en automóvil/);
+  assert.match(await evaluate(`${visible('#buddy-text')}.value`), /TARJETA DE APOYO ENTRE VECINOS/);
+  await send('Emulation.setEmulatedMedia', { media: 'print' });
+  const buddyPdf = await send('Page.printToPDF', { printBackground: true, paperWidth: 8.5, paperHeight: 11, preferCSSPageSize: true });
+  assert.ok(Buffer.from(buddyPdf.data, 'base64').length > 2000, 'buddy card must print a nonempty page');
+  await send('Emulation.setEmulatedMedia', { media: 'screen' });
+  await click('#buddy-close');
+  assert.equal(await evaluate(`document.querySelector('#buddy-dialog').open`), false);
+  await setValue('#buddy-table tbody tr select', 'homes', 'change');
+  await click('#methodology > summary');
+  assert.equal(await evaluate(`document.querySelector('#methodology').open`), true);
+  assert.match(await text('#methodology'), /curve-number/);
+
   await click('#selftest');
   await until('nine self-test rows', () => evaluate(`document.querySelectorAll('#selftest-list li').length === 9`));
   assert.equal(await evaluate(`document.querySelectorAll('#selftest-list .pass').length`), 9);
@@ -267,7 +294,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('#settings').open`), false);
   assert.ok(await evaluate(`document.querySelector('#map').getBoundingClientRect().bottom < innerHeight`));
   for (const selector of ['#tier-row', '#cutoff-chart', '#alert-matrix', '#compare-table',
-    '#selftest', '#verify-btn', '#verify-input']) {
+    '#buddy-table', '#selftest', '#verify-btn', '#verify-input']) {
     const box = await evaluate(`(() => {
       const el = ${visible(selector)};
       const wrap = el.closest('.table-wrap') ?? el;
@@ -286,6 +313,10 @@ try {
   assert.ok(await evaluate(`document.querySelector('#card-dialog').open`));
   assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
   await click('#card-close');
+  await click('#buddy-open');
+  assert.ok(await evaluate(`document.querySelector('#buddy-dialog').open`));
+  assert.equal(await evaluate('document.documentElement.scrollWidth'), 390);
+  await click('#buddy-close');
 
   await until('local scope is controlled by the offline worker', () => evaluate('Boolean(navigator.serviceWorker.controller)'), 8000);
   const onlineEvents = [...events];

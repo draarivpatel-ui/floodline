@@ -38,6 +38,7 @@ const allowed = new Set([
   '/src/brief.js',
   '/src/sha256.js',
   '/src/selftest.js',
+  '/src/buddy.js',
 ]);
 
 const BASES = ['/', '/floodline/'];

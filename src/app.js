@@ -7,6 +7,7 @@ import { shortcutAction } from './controls.js';
 import { renderCutoffChart, renderHydrograph, renderMap } from './viz.js';
 import { IMPASSABLE_M, STORM_TIERS, bestInBudget, compareTier } from './mitigation.js';
 import { cutoffMatrix } from './timeline.js';
+import { buddyModel, buddyText, renderBuddy, suggestBuddies } from './buddy.js';
 import {
   briefCSV, briefDocument, briefMarkdown, briefPayload, decodeScenarioHash,
   encodeScenarioHash, verifyBriefDocument,
@@ -33,6 +34,10 @@ const els = {
   budget: $('budget'), budgetReadout: $('budget-readout'),
   compareTable: $('compare-table'), compareNote: $('compare-note'),
   cutoffSvg: $('cutoff-chart'), alertMatrix: $('alert-matrix'), cutoffNote: $('cutoff-note'),
+  buddyNote: $('buddy-note'), buddyTable: $('buddy-table'), buddyOpen: $('buddy-open'),
+  buddyDialog: $('buddy-dialog'), buddyLang: $('buddy-language'), buddyPaper: $('buddy-paper'),
+  buddyText: $('buddy-text'), buddyCopy: $('buddy-copy'), buddyPrint: $('buddy-print'),
+  buddyClose: $('buddy-close'),
   briefJson: $('export-brief-json'), briefCsv: $('export-brief-csv'), briefMd: $('export-brief-md'),
   bookmark: $('bookmark'), bookmarkUrl: $('bookmark-url'),
   verifyInput: $('verify-input'), verifyBtn: $('verify-btn'), verifyResult: $('verify-result'),
@@ -60,6 +65,7 @@ const state = {
   tierSpec: null,
   comparison: null,
   matrix: null,
+  buddies: {},
 };
 
 function addEl(parent, tag, className, text) {
@@ -291,8 +297,59 @@ function computeAnalysis() {
   state.comparison = compareTier(state.model, state.tierSpec.scale, origins, 'car');
   state.matrix = cutoffMatrix(state.preset.graph, state.model.active, origins, state.mode,
     { raise: state.model.raise });
+  syncBuddies();
   renderComparator();
   renderCutoff();
+  renderBuddyPanel();
+}
+
+// Assignments persist across re-solves; only a missing or stale zone id gets
+// a fresh nearest-neighbor suggestion.
+function syncBuddies() {
+  const origins = originNodes();
+  const suggested = suggestBuddies(state.preset.graph, origins);
+  for (const id of origins) {
+    if (state.buddies[id] === id || !origins.includes(state.buddies[id])) {
+      state.buddies[id] = suggested.get(id) ?? null;
+    }
+  }
+}
+
+function renderBuddyPanel() {
+  if (!state.matrix) return;
+  const modeLabel = MODE_LABEL[state.mode];
+  els.buddyNote.textContent =
+    `Under the ${state.tierSpec.label} tier (rain scale x${state.tierSpec.scale}), ` +
+    `${modeLabel} travel: each zone is paired with one buddy zone. Its first cut and ` +
+    `last safe minutes above set the check-in deadline on the buddy card.`;
+  const table = els.buddyTable;
+  table.textContent = '';
+  const head = addEl(addEl(table, 'thead'), 'tr');
+  for (const h of ['Zone', 'Households', 'First cut', 'Last safe', 'Buddy zone']) {
+    const th = addEl(head, 'th', null, h);
+    th.scope = 'col';
+  }
+  const body = addEl(table, 'tbody');
+  const origins = originNodes();
+  for (const row of state.matrix.rows) {
+    const tr = addEl(body, 'tr');
+    addEl(tr, 'td', null, row.label);
+    addEl(tr, 'td', null, String(row.households));
+    addEl(tr, 'td', null, row.firstCut === null ? 'never' : `min ${row.firstCut}`);
+    addEl(tr, 'td', null, row.lastSafe === null ? 'none' : `min ${row.lastSafe}`);
+    const cell = addEl(tr, 'td');
+    const select = addEl(cell, 'select');
+    select.setAttribute('aria-label', `Buddy zone for ${row.label}`);
+    for (const other of origins) {
+      if (other === row.origin) continue;
+      const option = addEl(select, 'option', null, labelOf(other));
+      option.value = other;
+    }
+    select.value = state.buddies[row.origin] ?? '';
+    select.addEventListener('change', () => {
+      state.buddies[row.origin] = select.value;
+    });
+  }
 }
 
 const fmtCut = v => v === Infinity ? 'never' : v === -Infinity ? 'closed' : v.toFixed(1);
@@ -424,6 +481,26 @@ function openCard() {
   if (!els.dialog.open) els.dialog.showModal();
 }
 
+function renderBuddyCard() {
+  const card = buddyModel({
+    graph: state.preset.graph,
+    matrix: state.matrix,
+    tierLabel: state.tierSpec.label,
+    scale: state.tierSpec.scale,
+    mode: state.mode,
+    assignments: state.buddies,
+    language: els.buddyLang.value,
+  });
+  renderBuddy(els.buddyPaper, card);
+  els.buddyText.value = buddyText(card);
+}
+
+function openBuddy() {
+  setPlaying(false);
+  renderBuddyCard();
+  if (!els.buddyDialog.open) els.buddyDialog.showModal();
+}
+
 els.preset.addEventListener('change', () => {
   state.preset = PRESETS.find(p => p.id === els.preset.value) ?? state.preset;
   state.edits = null;
@@ -494,6 +571,21 @@ els.cardLang.addEventListener('change', () => {
 });
 els.cardPrint.addEventListener('click', () => window.print());
 els.cardClose.addEventListener('click', () => els.dialog.close());
+
+els.buddyOpen.addEventListener('click', openBuddy);
+els.buddyLang.addEventListener('change', renderBuddyCard);
+els.buddyPrint.addEventListener('click', () => window.print());
+els.buddyClose.addEventListener('click', () => els.buddyDialog.close());
+els.buddyCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(els.buddyText.value);
+  } catch {
+    const block = els.buddyText.closest('.buddy-text-block');
+    if (block) block.open = true;
+    els.buddyText.focus();
+    els.buddyText.select();
+  }
+});
 
 function showExportError(error) {
   els.exportError.textContent = `Export failed: ${error instanceof Error ? error.message : String(error)}`;

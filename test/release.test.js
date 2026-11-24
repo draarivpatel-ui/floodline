@@ -38,7 +38,7 @@ test('every src module is served by the dev server allowlist', () => {
 });
 
 test('the service worker version advanced with the new shell', () => {
-  assert.ok(sw.includes('v4'), 'expected the v4 cache version');
+  assert.ok(sw.includes('v5'), 'expected the v5 cache version');
 });
 
 test('every element id app.js looks up exists in index.html', () => {
@@ -55,10 +55,13 @@ test('the page never references an external origin', () => {
   assert.deepEqual(externals, []);
 });
 
-test('the comparator, timeline, and self-check panels exist in the page', () => {
+test('the comparator, timeline, buddy, and self-check panels exist in the page', () => {
   for (const id of ['tier-row', 'intensity', 'budget', 'compare-table', 'cutoff-chart',
-    'alert-matrix', 'export-brief-json', 'export-brief-csv', 'export-brief-md',
-    'bookmark', 'bookmark-url', 'verify-input', 'verify-btn', 'selftest', 'selftest-list']) {
+    'alert-matrix', 'buddy-note', 'buddy-table', 'buddy-open', 'buddy-dialog',
+    'buddy-language', 'buddy-paper', 'buddy-text', 'buddy-copy', 'buddy-print',
+    'buddy-close', 'methodology', 'export-brief-json', 'export-brief-csv',
+    'export-brief-md', 'bookmark', 'bookmark-url', 'verify-input', 'verify-btn',
+    'selftest', 'selftest-list']) {
     assert.ok(index.includes(`id="${id}"`), `#${id} panel missing`);
   }
 });

@@ -1,6 +1,6 @@
 const SCOPE = new URL(self.registration.scope);
 const PREFIX = `floodline-shell:${SCOPE.pathname}:`;
-const VERSION = `${PREFIX}v4`;
+const VERSION = `${PREFIX}v5`;
 const SHELL = [
   'index.html',
   'styles.css',
@@ -19,6 +19,7 @@ const SHELL = [
   'src/brief.js',
   'src/sha256.js',
   'src/selftest.js',
+  'src/buddy.js',
 ];
 
 self.addEventListener('install', event => {

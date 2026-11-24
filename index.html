@@ -168,6 +168,17 @@
       <p class="stats" id="cutoff-note"></p>
     </section>
 
+    <section class="panel" aria-labelledby="buddy-heading">
+      <h2 id="buddy-heading">Neighborhood buddy check-in</h2>
+      <p class="stats" id="buddy-note"></p>
+      <div class="table-wrap">
+        <table id="buddy-table" class="sheet"></table>
+      </div>
+      <div class="export-row">
+        <button class="btn small primary" id="buddy-open" type="button">Buddy card</button>
+      </div>
+    </section>
+
     <section class="panel" aria-labelledby="brief-heading">
       <h2 id="brief-heading">Resilience brief and self-checks</h2>
       <div class="export-row">
@@ -189,6 +200,27 @@
       <p id="verify-result" class="error" role="alert" hidden></p>
       <ol id="selftest-list" class="selftest-list"></ol>
     </section>
+
+    <details class="panel method-panel" id="methodology">
+      <summary>Methodology and lessons</summary>
+      <h3>How the model works</h3>
+      <ul>
+        <li>Each 15-minute rain bin is split into abstractions, retained storage and runoff by the SCS curve-number accounting (retention S = (1000 / CN - 10) x 25.4 mm, initial abstraction 0.2 S); a connected impervious percentage blends the curve number upward.</li>
+        <li>Every bin's runoff volume is convolved with a unit-volume triangular lag kernel on integer minute knots, so the minute-grid trapezoid integration is exact and the volume residual stays near zero.</li>
+        <li>Stage comes from inverting Manning normal depth by bisection in a trapezoidal channel; drain blockage scales roughness n by (1 + blockage).</li>
+        <li>A road floods when the stage overtops its floor elevation (the lower of its two endpoint floors, plus any bridge raise or crossing lift); a vehicle route fails at 0.30 m of modeled water and a walking route at 0.15 m.</li>
+        <li>Departure feasibility is scanned minute by minute over the six-hour horizon: a trip counts as verified dry only when every leg stays below the overtop threshold for its whole crossing window, so first-cut and last-safe minutes come from exact flood schedules, not snapshots.</li>
+        <li>Storm tiers multiply the invented rain bins by 0.6, 1.4 or 2 (custom up to 2.2); intervention costs and effects are disclosed planning-model constants, never measurements of a real city.</li>
+      </ul>
+      <h3>What the exercise shows</h3>
+      <ul>
+        <li>Pre-evacuation alerts have a deadline: they must land before a zone's first failed departure, and the matrix prints that minute per zone.</li>
+        <li>The shortest route is not the dry one: the dashed shortest path can cross water the verified detour avoids.</li>
+        <li>Streets can reopen: a strip that flips from cut back to dry means the zone floods and drains inside the horizon, so later departures can still verify.</li>
+        <li>Cheap packages punch above their cost: the comparator ranks avoided stranding per $1M, so the low-cost package often beats the big wall.</li>
+        <li>A buddy plan turns the matrix into people: zones that keep their window longer are the natural callers for zones cut first.</li>
+      </ul>
+    </details>
   </section>
 </main>
 
@@ -205,6 +237,26 @@
     <button class="btn small" id="card-close" type="button">Close</button>
   </div>
   <div id="card-paper" class="card-paper"></div>
+</dialog>
+
+<dialog id="buddy-dialog" aria-labelledby="buddy-dialog-title">
+  <div class="card-toolbar">
+    <span id="buddy-dialog-title" class="group-label">Neighborhood buddy card</span>
+    <label class="field inline" for="buddy-language">Language
+      <select id="buddy-language">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+      </select>
+    </label>
+    <button class="btn small" id="buddy-copy" type="button">Copy text</button>
+    <button class="btn small" id="buddy-print" type="button">Print card</button>
+    <button class="btn small" id="buddy-close" type="button">Close</button>
+  </div>
+  <div id="buddy-paper" class="card-paper"></div>
+  <details class="buddy-text-block">
+    <summary>Plain text for SMS or WhatsApp</summary>
+    <textarea id="buddy-text" rows="10" readonly spellcheck="false"></textarea>
+  </details>
 </dialog>
 
 <script type="module" src="./src/app.js"></script>

@@ -4,7 +4,8 @@ FloodLine is a small, offline, dependency-free training workbench for flood-evac
 reasoning. It lets a class or a family watch a synthetic storm raise water in a fictional
 basin, compare a shortest route against a route that stays dry, weigh five invented
 mitigation interventions across severity tiers, see when each neighborhood's verified
-departure window closes and reopens, and print a bilingual (English/Spanish) go-card.
+departure window closes and reopens, pair zones into a mutual-aid buddy plan, and print
+bilingual (English/Spanish) go-cards and buddy cards.
 Everything on screen is a teaching artifact: the basin, the places, the roads, the storm,
 the tiers, the household counts, and the intervention costs are invented, and the app
 issues no forecasts, warnings, or evacuation orders.
@@ -83,6 +84,20 @@ package dependencies.
   stranded-zone reduction, cutoff extension, and households avoided per million dollars.
   Costs, household counts, and the 0.30 m vehicle impassability reference are disclosed
   invented unit rates; every intervention is checked to be non-worsening.
+- **Neighborhood buddy check-in.** The buddy panel pairs each vulnerable zone with one
+  other zone (nearest by map distance, editable per row) and reads each zone's first-cut
+  and last-safe minutes straight off the live cutoff matrix. The buddy card renders one
+  checklist block per pair in English or Spanish: who calls whom first (the longer-window
+  zone calls the earlier-cut one), the call-by minute before each zone's first failed
+  departure, the shelter-in-place fallback when a zone has no verified dry departure, and
+  the invented household counts. A plain-text export copies clean into SMS or WhatsApp
+  and the dialog prints on one sheet.
+- **Methodology and lessons drawer.** A collapsed panel under the workbench states the
+  SCS curve-number accounting, the triangular lag kernel, the Manning inversion, the
+  road-overtopping rule, the minute-scanned departure feasibility, and the disclosed
+  invented constants, then lists what the exercise is meant to teach: alerts must beat a
+  zone's first cut minute, the shortest route is not the dry one, streets can reopen,
+  cheap packages punch above their cost, and a buddy plan turns the matrix into people.
 - **Signed brief and bookmarking.** The brief panel exports a signed JSON/CSV/Markdown
   resilience brief: the payload is canonically serialized and hashed with a built-in
   SHA-256, so a pasted document can be re-verified in-page and any edit fails the check.
@@ -115,6 +130,8 @@ package dependencies.
 - `src/exports.js`: CSV telemetry, GeoJSON route snapshot, and a SHA-256 audit bundle with
   canonical (key-sorted, deterministic) JSON serialization.
 - `src/card.js`: the bilingual go-card model and renderer.
+- `src/buddy.js`: the bilingual buddy-card model, nearest-zone pairing suggestion, and
+  plain-text checklist export.
 - `src/controls.js`: opt-in keyboard shortcuts (P for play, G for the go-card).
 - `sw.js`: scoped service worker that precaches the local shell for offline use.
 - `tools/serve.mjs`: the zero-dependency dev server.

@@ -339,15 +339,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   margin: 0;
 }
 
-/* Go-card dialog and its print sheet. */
-dialog#card-dialog {
+/* Go-card and buddy-card dialogs and their print sheets. */
+dialog#card-dialog, dialog#buddy-dialog {
   width: min(640px, calc(100% - 32px));
   padding: 0;
   border: 1px solid var(--ink);
   background: var(--paper);
   color: var(--ink);
 }
-dialog#card-dialog::backdrop { background: rgba(20, 43, 43, 0.45); }
+dialog#card-dialog::backdrop, dialog#buddy-dialog::backdrop { background: rgba(20, 43, 43, 0.45); }
 .card-toolbar {
   display: flex;
   align-items: center;
@@ -404,6 +404,45 @@ dialog#card-dialog::backdrop { background: rgba(20, 43, 43, 0.45); }
   font-size: 13px;
   font-weight: 700;
   color: var(--bad);
+}
+.card-paper .buddy-pair {
+  margin: 16px 0 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+}
+.card-paper .buddy-shared { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.buddy-text-block { padding: 0 30px 20px; }
+.buddy-text-block summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted); }
+.buddy-text-block textarea { margin-top: 8px; }
+
+/* Methodology drawer keeps the panel frame with a titled summary. */
+.method-panel summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.method-panel h3 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.method-panel ul { margin: 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+.method-panel li { margin-top: 6px; }
+
+/* Buddy pairing table: the buddy select stays compact inside the sheet cell. */
+#buddy-table td select {
+  width: auto;
+  min-width: 0;
+  margin-top: 0;
+  padding: 3px 6px;
+  font: 12px var(--ui);
 }
 
 /* Comparator, cutoff timeline, and brief panels keep the ruled field-sheet look. */
@@ -474,8 +513,8 @@ table.sheet td.num, table.sheet th.num { text-align: right; }
 @media print {
   body { background: #fff; }
   body > *:not(dialog) { display: none !important; }
-  dialog#card-dialog:not([open]) { display: none; }
-  dialog#card-dialog[open] {
+  dialog#card-dialog:not([open]), dialog#buddy-dialog:not([open]) { display: none; }
+  dialog#card-dialog[open], dialog#buddy-dialog[open] {
     display: block;
     position: static;
     width: auto;
@@ -483,13 +522,14 @@ table.sheet td.num, table.sheet th.num { text-align: right; }
     margin: 0;
     border: 0;
   }
-  dialog#card-dialog::backdrop { display: none; }
+  dialog#card-dialog::backdrop, dialog#buddy-dialog::backdrop { display: none; }
   .card-toolbar { display: none; }
   .card-paper { padding: 0; font-size: 11pt; }
   .card-paper .card-title { font-size: 20pt; }
   .card-paper .card-legs { margin-top: 8px; }
   .card-paper .card-legs li { margin-top: 3px; }
   .card-paper .card-warning { margin-top: 12px; }
+  .buddy-text-block { display: none; }
 }
 
 @media (max-width: 720px) {
