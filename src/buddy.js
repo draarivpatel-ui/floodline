@@ -1,5 +1,27 @@
 export const LANGUAGES = ['en', 'es'];
 
+const DIALOG_TEXT = {
+  en: {
+    language: 'Language', languages: { en: 'English', es: 'Español' },
+    copy: 'Copy text', print: 'Print card', close: 'Close',
+    plainText: 'Plain text for SMS or WhatsApp',
+  },
+  es: {
+    language: 'Idioma', languages: { en: 'Inglés', es: 'Español' },
+    copy: 'Copiar texto', print: 'Imprimir tarjeta', close: 'Cerrar',
+    plainText: 'Texto sin formato para SMS o WhatsApp',
+  },
+};
+
+export function buddyDialogText(language) {
+  return DIALOG_TEXT[LANGUAGES.includes(language) ? language : 'en'];
+}
+
+function localizedTierLabel(label, language) {
+  if (language !== 'es') return label;
+  return label.replace(/^(\d+)-yr$/, '$1 años').replace(/^custom\b/, 'personalizado');
+}
+
 const TEXT = {
   en: {
     title: 'Neighborhood buddy card',
@@ -82,7 +104,7 @@ export function buddyModel({ graph, matrix, tierLabel, scale, mode, assignments,
   const t = TEXT[lang];
   const modeLabel = t[mode] ?? t.car;
   const times = new Map((matrix?.rows ?? []).map(row => [row.origin, row]));
-  const card = { lang, title: t.title, training: t.training, tier: t.tier(tierLabel, scale, modeLabel), pairs: [], shared: [t.before, t.flood, t.notice] };
+  const card = { lang, title: t.title, training: t.training, tier: t.tier(localizedTierLabel(tierLabel, lang), scale, modeLabel), pairs: [], shared: [t.before, t.flood, t.notice] };
   for (const row of matrix?.rows ?? []) {
     const zoneId = row.origin;
     const buddyId = assignments?.[zoneId];

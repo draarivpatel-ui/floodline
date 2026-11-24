@@ -208,16 +208,16 @@
         <li>Each 15-minute rain bin is split into abstractions, retained storage and runoff by the SCS curve-number accounting (retention S = (1000 / CN - 10) x 25.4 mm, initial abstraction 0.2 S); a connected impervious percentage blends the curve number upward.</li>
         <li>Every bin's runoff volume is convolved with a unit-volume triangular lag kernel on integer minute knots, so the minute-grid trapezoid integration is exact and the volume residual stays near zero.</li>
         <li>Stage comes from inverting Manning normal depth by bisection in a trapezoidal channel; drain blockage scales roughness n by (1 + blockage).</li>
-        <li>A road floods when the stage overtops its floor elevation (the lower of its two endpoint floors, plus any bridge raise or crossing lift); a vehicle route fails at 0.30 m of modeled water and a walking route at 0.15 m.</li>
+        <li>A road floods when the stage overtops its effective floor: min(edge.floor + bridgeRaise + lift, endpointA.floor, endpointB.floor). Bridge raise applies only to bridge edges; lift is a per-road crossing lift. Endpoint floors cap the raised road. The map's dry routes, family cards, cutoff matrix and buddy cards require no modeled water on any traveled road. The comparator's peak-road passability uses a separate 0.30 m vehicle reference; the shortcut depth display uses 0.30 m for cars and 0.15 m for walking as reference warnings, never permission to enter water.</li>
         <li>Departure feasibility is scanned minute by minute over the six-hour horizon: a trip counts as verified dry only when every leg stays below the overtop threshold for its whole crossing window, so first-cut and last-safe minutes come from exact flood schedules, not snapshots.</li>
-        <li>Storm tiers multiply the invented rain bins by 0.6, 1.4 or 2 (custom up to 2.2); intervention costs and effects are disclosed planning-model constants, never measurements of a real city.</li>
+        <li>Storm tiers multiply the invented rain bins by 0.6, 1, 1.4 or 2 (custom from 0.4 to 2.2). The comparator and cutoff matrix each rerun that scaled rain; the cutoff matrix also retains the active pavement, drain and bridge mitigations. Tier labels are exercise labels, not design return periods. Intervention costs and effects are disclosed planning-model constants, never measurements of a real city.</li>
       </ul>
       <h3>What the exercise shows</h3>
       <ul>
         <li>Pre-evacuation alerts have a deadline: they must land before a zone's first failed departure, and the matrix prints that minute per zone.</li>
         <li>The shortest route is not the dry one: the dashed shortest path can cross water the verified detour avoids.</li>
         <li>Streets can reopen: a strip that flips from cut back to dry means the zone floods and drains inside the horizon, so later departures can still verify.</li>
-        <li>Cheap packages punch above their cost: the comparator ranks avoided stranding per $1M, so the low-cost package often beats the big wall.</li>
+        <li>The comparator reports avoided stranded households per $1M. Its best-in-budget selection prioritizes fewer stranded zones, then more passable road length, then lower cost.</li>
         <li>A buddy plan turns the matrix into people: zones that keep their window longer are the natural callers for zones cut first.</li>
       </ul>
     </details>
@@ -242,7 +242,7 @@
 <dialog id="buddy-dialog" aria-labelledby="buddy-dialog-title">
   <div class="card-toolbar">
     <span id="buddy-dialog-title" class="group-label">Neighborhood buddy card</span>
-    <label class="field inline" for="buddy-language">Language
+    <label class="field inline" for="buddy-language"><span id="buddy-language-label">Language</span>
       <select id="buddy-language">
         <option value="en">English</option>
         <option value="es">Español</option>
@@ -254,8 +254,8 @@
   </div>
   <div id="buddy-paper" class="card-paper"></div>
   <details class="buddy-text-block">
-    <summary>Plain text for SMS or WhatsApp</summary>
-    <textarea id="buddy-text" rows="10" readonly spellcheck="false"></textarea>
+    <summary id="buddy-text-summary">Plain text for SMS or WhatsApp</summary>
+    <textarea id="buddy-text" rows="10" readonly spellcheck="false" aria-label="Plain text for SMS or WhatsApp"></textarea>
   </details>
 </dialog>
 

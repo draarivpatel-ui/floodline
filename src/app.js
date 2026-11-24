@@ -1,13 +1,13 @@
-import { bounded, parseRain } from './hydrology.js';
+import { bounded, parseRain, simulate } from './hydrology.js';
 import { DEPTH_REFERENCES, isAboveReference } from './routing.js';
 import { PRESETS, buildScenario, compareScenario, inspectScenario } from './presets.js';
 import { auditBundle, canonicalJSON, routeGeoJSON, telemetryCSV } from './exports.js';
 import { cardModel, renderCard } from './card.js';
 import { shortcutAction } from './controls.js';
 import { renderCutoffChart, renderHydrograph, renderMap } from './viz.js';
-import { IMPASSABLE_M, STORM_TIERS, bestInBudget, compareTier } from './mitigation.js';
+import { IMPASSABLE_M, STORM_TIERS, bestInBudget, compareTier, tieredInput } from './mitigation.js';
 import { cutoffMatrix } from './timeline.js';
-import { buddyModel, buddyText, renderBuddy, suggestBuddies } from './buddy.js';
+import { buddyDialogText, buddyModel, buddyText, renderBuddy, suggestBuddies } from './buddy.js';
 import {
   briefCSV, briefDocument, briefMarkdown, briefPayload, decodeScenarioHash,
   encodeScenarioHash, verifyBriefDocument,
@@ -38,6 +38,8 @@ const els = {
   buddyDialog: $('buddy-dialog'), buddyLang: $('buddy-language'), buddyPaper: $('buddy-paper'),
   buddyText: $('buddy-text'), buddyCopy: $('buddy-copy'), buddyPrint: $('buddy-print'),
   buddyClose: $('buddy-close'),
+  buddyTitle: $('buddy-dialog-title'), buddyLanguageLabel: $('buddy-language-label'),
+  buddySummary: $('buddy-text-summary'),
   briefJson: $('export-brief-json'), briefCsv: $('export-brief-csv'), briefMd: $('export-brief-md'),
   bookmark: $('bookmark'), bookmarkUrl: $('bookmark-url'),
   verifyInput: $('verify-input'), verifyBtn: $('verify-btn'), verifyResult: $('verify-result'),
@@ -65,6 +67,7 @@ const state = {
   tierSpec: null,
   comparison: null,
   matrix: null,
+  cutoffRun: null,
   buddies: {},
 };
 
@@ -295,12 +298,22 @@ function computeAnalysis() {
   state.tierSpec = currentTierSpec();
   const origins = originNodes();
   state.comparison = compareTier(state.model, state.tierSpec.scale, origins, 'car');
-  state.matrix = cutoffMatrix(state.preset.graph, state.model.active, origins, state.mode,
-    { raise: state.model.raise });
+  // Keep the tier metadata with the scaled, actively mitigated simulation.
+  state.cutoffRun = {
+    tier: { ...state.tierSpec },
+    sim: simulate(tieredInput(state.model.patched, state.tierSpec.scale)),
+  };
+  computeCutoffMatrix();
   syncBuddies();
   renderComparator();
   renderCutoff();
   renderBuddyPanel();
+}
+
+function computeCutoffMatrix() {
+  state.matrix = cutoffMatrix(state.preset.graph, state.cutoffRun.sim, originNodes(), state.mode,
+    { raise: state.model.raise });
+  state.matrix.tier = state.cutoffRun.tier;
 }
 
 // Assignments persist across re-solves; only a missing or stale zone id gets
@@ -318,8 +331,9 @@ function syncBuddies() {
 function renderBuddyPanel() {
   if (!state.matrix) return;
   const modeLabel = MODE_LABEL[state.mode];
+  const tier = state.matrix.tier;
   els.buddyNote.textContent =
-    `Under the ${state.tierSpec.label} tier (rain scale x${state.tierSpec.scale}), ` +
+    `Under the ${tier.label} tier (rain scale x${tier.scale}), ` +
     `${modeLabel} travel: each zone is paired with one buddy zone. Its first cut and ` +
     `last safe minutes above set the check-in deadline on the buddy card.`;
   const table = els.buddyTable;
@@ -350,6 +364,7 @@ function renderBuddyPanel() {
       state.buddies[row.origin] = select.value;
     });
   }
+  if (els.buddyDialog.open) renderBuddyCard();
 }
 
 const fmtCut = v => v === Infinity ? 'never' : v === -Infinity ? 'closed' : v.toFixed(1);
@@ -456,7 +471,8 @@ function renderCutoff() {
     .filter(row => row.firstCut !== null)
     .map(row => `${row.label} at minute ${row.firstCut}`);
   els.cutoffNote.textContent =
-    `Each strip answers whether a ${state.mode === 'car' ? 'car' : 'person on foot'} leaving ` +
+    `${state.matrix.tier.label} tier (rain scale x${state.matrix.tier.scale}): each strip answers ` +
+    `whether a ${state.mode === 'car' ? 'car' : 'person on foot'} leaving ` +
     `that zone at a storm minute can still reach a shelter on roads that stay dry for the whole ` +
     `trip. Pre-evacuation alerts must land before a zone's first failed departure` +
     `${alerts.length ? ` (${alerts.join('; ')})` : ''}. Click a strip to jump there.`;
@@ -485,14 +501,28 @@ function renderBuddyCard() {
   const card = buddyModel({
     graph: state.preset.graph,
     matrix: state.matrix,
-    tierLabel: state.tierSpec.label,
-    scale: state.tierSpec.scale,
+    tierLabel: state.matrix.tier.label,
+    scale: state.matrix.tier.scale,
     mode: state.mode,
     assignments: state.buddies,
     language: els.buddyLang.value,
   });
   renderBuddy(els.buddyPaper, card);
   els.buddyText.value = buddyText(card);
+  const labels = buddyDialogText(card.lang);
+  els.buddyDialog.lang = card.lang;
+  els.buddyText.lang = card.lang;
+  els.buddyTitle.textContent = card.title;
+  els.buddyLanguageLabel.textContent = labels.language;
+  for (const option of els.buddyLang.querySelectorAll('option')) {
+    option.textContent = labels.languages[option.value];
+    option.lang = card.lang;
+  }
+  els.buddyCopy.textContent = labels.copy;
+  els.buddyPrint.textContent = labels.print;
+  els.buddyClose.textContent = labels.close;
+  els.buddySummary.textContent = labels.plainText;
+  els.buddyText.setAttribute('aria-label', labels.plainText);
 }
 
 function openBuddy() {
@@ -523,11 +553,11 @@ els.origin.addEventListener('change', () => {
 els.mode.addEventListener('change', () => {
   state.mode = els.mode.value;
   state.compare = compareScenario(state.model, state.origin, state.mode);
-  state.matrix = cutoffMatrix(state.preset.graph, state.model.active, originNodes(), state.mode,
-    { raise: state.model.raise });
+  computeCutoffMatrix();
   renderMetrics();
   renderMinute();
   renderCutoff();
+  renderBuddyPanel();
 });
 
 els.minute.addEventListener('input', () => {

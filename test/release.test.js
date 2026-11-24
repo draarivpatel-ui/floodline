@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { roadFloor } from '../src/routing.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = rel => readFileSync(join(root, rel), 'utf8');
@@ -38,7 +39,7 @@ test('every src module is served by the dev server allowlist', () => {
 });
 
 test('the service worker version advanced with the new shell', () => {
-  assert.ok(sw.includes('v5'), 'expected the v5 cache version');
+  assert.match(sw, /const VERSION = `\$\{PREFIX\}v6`;/, 'expected the v6 cache version');
 });
 
 test('every element id app.js looks up exists in index.html', () => {
@@ -75,4 +76,25 @@ test('no new module imports a remote URL or a package specifier', () => {
     }
     assert.ok(!source.includes('fetch('), `${name} calls fetch()`);
   }
+});
+
+test('methodology states the actual road floor equation and separates dry routes from depth references', () => {
+  assert.ok(index.includes('min(edge.floor + bridgeRaise + lift, endpointA.floor, endpointB.floor)'));
+  const nodes = new Map([['a', { floor: 3 }], ['b', { floor: 5 }]]);
+  const edge = { id: 'road', a: 'a', b: 'b', floor: 1, bridge: true };
+  assert.equal(roadFloor(edge, nodes, 1, new Map([['road', 0.5]])), 2.5);
+  assert.equal(roadFloor(edge, nodes, 3, new Map([['road', 0.5]])), 3);
+  assert.equal(roadFloor({ ...edge, bridge: false }, nodes, 3, new Map([['road', 0.5]])), 1.5);
+  assert.match(index, /cutoff matrix and buddy cards require no modeled water/);
+  assert.match(index, /comparator's peak-road passability uses a separate 0\.30 m vehicle reference/);
+  assert.match(index, /shortcut depth display uses 0\.30 m for cars and 0\.15 m for walking as reference warnings/);
+  assert.doesNotMatch(index, /vehicle route fails at 0\.30 m|walking route at 0\.15 m|lower of its two endpoint floors, plus/);
+});
+
+test('methodology includes the baseline storm scale, custom range and actual budget ranking', () => {
+  assert.match(index, /0\.6, 1, 1\.4 or 2 \(custom from 0\.4 to 2\.2\)/);
+  assert.match(index, /cutoff matrix also retains the active pavement, drain and bridge mitigations/);
+  assert.match(index, /Tier labels are exercise labels, not design return periods/);
+  assert.match(index, /avoided stranded households per \$1M/);
+  assert.match(index, /prioritizes fewer stranded zones, then more passable road length, then lower cost/);
 });

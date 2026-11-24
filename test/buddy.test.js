@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+import * as hydrology from '../src/hydrology.js';
+import * as routing from '../src/routing.js';
+import * as presets from '../src/presets.js';
+import * as mitigation from '../src/mitigation.js';
+import * as brief from '../src/brief.js';
+import * as exports from '../src/exports.js';
+import * as card from '../src/card.js';
+import * as controls from '../src/controls.js';
 import { PRESETS, buildScenario } from '../src/presets.js';
 import { cutoffMatrix } from '../src/timeline.js';
-import { buddyModel, buddyText, renderBuddy, suggestBuddies } from '../src/buddy.js';
+import { buddyDialogText, buddyModel, buddyText, renderBuddy, suggestBuddies } from '../src/buddy.js';
 
 const model = buildScenario(PRESETS[0]);
 const graph = model.preset.graph;
@@ -171,4 +181,213 @@ test('renderBuddy honors the card language attribute', () => {
   renderBuddy(target, cardOf('es'));
   assert.equal(target.lang, 'es');
   assert.match(target.textContent, /Tarjeta de apoyo entre vecinos/);
+});
+
+// Run the actual app event handlers with real simulation and table renderers.
+// SVG drawing is omitted so these integration checks need no browser.
+class UIElement extends El {
+  constructor(document, tag = 'div') {
+    super(document);
+    this.tagName = tag;
+    this.value = '';
+    this.dataset = {};
+    this.attributes = {};
+    this.handlers = new Map();
+    this.open = false;
+    this.classList = { add() {}, toggle() {} };
+  }
+  appendChild(child) { child.parentElement = this; return super.appendChild(child); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  addEventListener(name, handler) {
+    const handlers = this.handlers.get(name) ?? [];
+    handlers.push(handler);
+    this.handlers.set(name, handlers);
+  }
+  emit(name) {
+    return Promise.all((this.handlers.get(name) ?? []).map(handler =>
+      handler({ target: this, preventDefault() {} })));
+  }
+  querySelectorAll(tag) {
+    return this.children.flatMap(child => [
+      ...(child.tagName === tag ? [child] : []), ...child.querySelectorAll(tag),
+    ]);
+  }
+  closest(selector) {
+    for (let node = this; node; node = node.parentElement) {
+      if (selector === '.buddy-text-block' && node.className === 'buddy-text-block') return node;
+    }
+    return null;
+  }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
+  focus() { this.focused = true; }
+  select() { this.selected = true; }
+}
+
+function loadWorkbench() {
+  const elements = new Map();
+  const document = {
+    createElement: tag => new UIElement(document, tag),
+    getElementById: id => elements.get(id),
+    addEventListener() {},
+  };
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  for (const [, tag, id] of page.matchAll(/<([a-z]+)\b[^>]*\bid="([^"]+)"/g)) {
+    elements.set(id, new UIElement(document, tag));
+  }
+  const get = id => elements.get(id);
+  get('intensity').value = '100';
+  for (const id of ['buddy-language', 'card-language']) {
+    get(id).value = 'en';
+    for (const language of ['en', 'es']) {
+      const option = document.createElement('option');
+      option.value = language;
+      get(id).appendChild(option);
+    }
+  }
+  const textBlock = document.createElement('details');
+  textBlock.className = 'buddy-text-block';
+  textBlock.appendChild(get('buddy-text-summary'));
+  textBlock.appendChild(get('buddy-text'));
+  const calls = { printed: 0, copied: null };
+  const navigator = { clipboard: { async writeText(text) { calls.copied = text; } } };
+  const window = {
+    location: { hash: '' }, matchMedia: () => ({ matches: false }),
+    print() { calls.printed += 1; }, addEventListener() {},
+  };
+  const source = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8')
+    .replace(/^import\s[\s\S]*?;\n/gm, '');
+  const context = {
+    ...hydrology, ...routing, ...presets, ...mitigation, ...brief, ...exports, ...card, ...controls,
+    cutoffMatrix, buddyDialogText, buddyModel, buddyText, renderBuddy, suggestBuddies,
+    renderCutoffChart() {}, renderHydrograph() {}, renderMap() {}, runSelfTests() { return []; },
+    document, window, navigator, clearInterval() {},
+  };
+  runInNewContext(source + '\nglobalThis.workbenchState = state;', context, { filename: 'src/app.js' });
+  return { state: context.workbenchState, get, calls, navigator, textBlock };
+}
+
+function assertVisibleTimes(ui) {
+  const rows = ui.get('buddy-table').querySelectorAll('tbody')[0].children;
+  assert.equal(rows.length, ui.state.matrix.rows.length);
+  for (const [index, row] of ui.state.matrix.rows.entries()) {
+    assert.equal(rows[index].children[2].textContent, row.firstCut === null ? 'never' : `min ${row.firstCut}`);
+    assert.equal(rows[index].children[3].textContent, row.lastSafe === null ? 'none' : `min ${row.lastSafe}`);
+  }
+}
+
+for (const [scale, expected] of [[2, [59, 58, 65]], [0.6, [null, null, null]]]) {
+  test(`app scales the simulation, visible table and buddy card together at x${scale}`, async () => {
+    const ui = loadWorkbench();
+    ui.get('intensity').value = String(scale * 100);
+    await ui.get('intensity').emit('input');
+    assert.deepEqual(ui.state.matrix.rows.map(row => row.firstCut), expected);
+    assert.equal(ui.state.matrix.tier, ui.state.cutoffRun.tier);
+    assert.equal(ui.state.matrix.tier.scale, scale);
+    const rainTotal = PRESETS[0].rain.reduce((sum, bin) => sum + bin, 0);
+    assert.ok(Math.abs(ui.state.cutoffRun.sim.bins.at(-1).rain - rainTotal * scale) < 1e-9);
+    assert.equal(ui.state.model.active.bins.at(-1).rain, rainTotal);
+    assertVisibleTimes(ui);
+    assert.match(ui.get('buddy-note').textContent, new RegExp(`rain scale x${scale}`));
+    assert.match(ui.get('cutoff-note').textContent, new RegExp(`rain scale x${scale}`));
+    await ui.get('buddy-open').emit('click');
+    assert.match(ui.get('buddy-text').value, new RegExp(`rain scale x${scale}`));
+    for (const row of ui.state.matrix.rows) {
+      assert.ok(ui.get('buddy-text').value.includes(row.firstCut === null
+        ? `${row.label} keeps a verified dry window`
+        : `storm minute ${row.firstCut}: that is the first minute ${row.label}`));
+    }
+  });
+}
+
+test('tier buttons rerun the cutoff storm at x2 and x0.6', async () => {
+  const ui = loadWorkbench();
+  for (const [id, expected] of [['t500', [59, 58, 65]], ['t10', [null, null, null]]]) {
+    await ui.get('tier-row').querySelectorAll('button').find(button => button.dataset.tier === id).emit('click');
+    assert.equal(ui.state.matrix.tier.id, id);
+    assert.deepEqual(ui.state.matrix.rows.map(row => row.firstCut), expected);
+    assertVisibleTimes(ui);
+  }
+});
+
+test('travel-mode changes refresh the visible buddy table using the current scaled storm', async () => {
+  const ui = loadWorkbench();
+  ui.get('intensity').value = '200';
+  await ui.get('intensity').emit('input');
+  const carCuts = ui.state.matrix.rows.map(row => row.firstCut);
+  const scaledRun = ui.state.cutoffRun;
+  await ui.get('buddy-open').emit('click');
+  ui.get('mode').value = 'pedestrian';
+  await ui.get('mode').emit('change');
+  const expected = cutoffMatrix(graph, scaledRun.sim, origins, 'pedestrian', { raise: model.raise });
+  assert.deepEqual(ui.state.matrix.rows.map(row => row.firstCut), expected.rows.map(row => row.firstCut));
+  assert.notDeepEqual(ui.state.matrix.rows.map(row => row.firstCut), carCuts);
+  assert.equal(ui.state.cutoffRun, scaledRun);
+  assertVisibleTimes(ui);
+  assert.match(ui.get('buddy-note').textContent, /on foot travel/);
+  assert.match(ui.get('buddy-text').value, /on foot travel/);
+});
+
+test('scaled cutoffs retain active pavement, drain clearing and bridge raising', async () => {
+  const ui = loadWorkbench();
+  for (const id of ['pavement', 'clear', 'bridge']) {
+    ui.get(id).checked = true;
+    await ui.get(id).emit('change');
+  }
+  ui.get('intensity').value = '200';
+  await ui.get('intensity').emit('input');
+  const scaled = buildScenario(PRESETS[0], { rain: PRESETS[0].rain.map(bin => bin * 2) },
+    { pavement: true, clear: true, bridge: true });
+  const expected = cutoffMatrix(graph, scaled.active, origins, 'car', { raise: scaled.raise });
+  assert.equal(ui.state.cutoffRun.sim.peakStage, scaled.active.peakStage);
+  assert.deepEqual(ui.state.matrix.rows.map(row => row.firstCut), expected.rows.map(row => row.firstCut));
+  assertVisibleTimes(ui);
+});
+
+test('Spanish dialog localizes its title, language selector, actions, expander and every tier label', async () => {
+  const ui = loadWorkbench();
+  await ui.get('buddy-open').emit('click');
+  ui.get('buddy-language').value = 'es';
+  await ui.get('buddy-language').emit('change');
+  for (const [id, expected] of [
+    ['buddy-dialog-title', 'Tarjeta de apoyo entre vecinos'], ['buddy-language-label', 'Idioma'],
+    ['buddy-copy', 'Copiar texto'], ['buddy-print', 'Imprimir tarjeta'], ['buddy-close', 'Cerrar'],
+    ['buddy-text-summary', 'Texto sin formato para SMS o WhatsApp'],
+  ]) assert.equal(ui.get(id).textContent, expected);
+  assert.deepEqual(ui.get('buddy-language').querySelectorAll('option').map(option => option.textContent), ['Inglés', 'Español']);
+  assert.equal(ui.get('buddy-dialog').lang, 'es');
+  assert.equal(ui.get('buddy-text').lang, 'es');
+  assert.equal(ui.get('buddy-text').attributes['aria-label'], 'Texto sin formato para SMS o WhatsApp');
+  for (const tier of mitigation.STORM_TIERS) {
+    await ui.get('tier-row').querySelectorAll('button').find(button => button.dataset.tier === tier.id).emit('click');
+    assert.ok(ui.get('buddy-text').value.includes(tier.label.replace('-yr', ' años')));
+    assert.doesNotMatch(ui.get('buddy-text').value, /-yr/);
+  }
+  ui.get('intensity').value = '200';
+  await ui.get('intensity').emit('input');
+  assert.match(ui.get('buddy-text').value, /personalizado x2\.00/);
+  assert.doesNotMatch(ui.get('buddy-text').value, /\bcustom\b/);
+  await ui.get('buddy-copy').emit('click');
+  assert.equal(ui.calls.copied, ui.get('buddy-text').value);
+  await ui.get('buddy-print').emit('click');
+  assert.equal(ui.calls.printed, 1);
+  await ui.get('buddy-close').emit('click');
+  assert.equal(ui.get('buddy-dialog').open, false);
+  ui.get('buddy-language').value = 'en';
+  await ui.get('buddy-language').emit('change');
+  assert.equal(ui.get('buddy-copy').textContent, 'Copy text');
+  assert.equal(ui.get('buddy-dialog-title').textContent, 'Neighborhood buddy card');
+  assert.match(ui.get('buddy-text').value, /custom x2\.00/);
+});
+
+test('Spanish copy fallback opens the localized plain-text control', async () => {
+  const ui = loadWorkbench();
+  ui.get('buddy-language').value = 'es';
+  await ui.get('buddy-open').emit('click');
+  ui.navigator.clipboard.writeText = async () => { throw new Error('Clipboard unavailable'); };
+  await ui.get('buddy-copy').emit('click');
+  assert.equal(ui.textBlock.open, true);
+  assert.equal(ui.get('buddy-text').focused, true);
+  assert.equal(ui.get('buddy-text').selected, true);
+  assert.equal(ui.get('buddy-text-summary').textContent, 'Texto sin formato para SMS o WhatsApp');
 });

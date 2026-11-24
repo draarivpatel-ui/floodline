@@ -1,6 +1,6 @@
 const SCOPE = new URL(self.registration.scope);
 const PREFIX = `floodline-shell:${SCOPE.pathname}:`;
-const VERSION = `${PREFIX}v5`;
+const VERSION = `${PREFIX}v6`;
 const SHELL = [
   'index.html',
   'styles.css',
