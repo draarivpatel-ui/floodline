@@ -533,9 +533,14 @@ table.sheet td.num, table.sheet th.num { text-align: right; }
 
 @page { size: letter; margin: 14mm; }
 
+/* Pointer targets: keep native sliders and disclosure rows at the 24px minimum. */
+summary { min-height: 1.5rem; }
+input[type="range"] { min-height: 1.5rem; }
+
 @media print {
-  body { background: #fff; }
-  body > *:not(dialog) { display: none !important; }
+  body { background: #fff; color: #111; }
+  /* A go-card dialog prints on its own; the workbench prints when none is open. */
+  body:has(dialog[open]) > *:not(dialog) { display: none !important; }
   dialog#card-dialog:not([open]), dialog#buddy-dialog:not([open]) { display: none; }
   dialog#card-dialog[open], dialog#buddy-dialog[open] {
     display: block;
@@ -553,6 +558,19 @@ table.sheet td.num, table.sheet th.num { text-align: right; }
   .card-paper .card-legs li { margin-top: 3px; }
   .card-paper .card-warning { margin-top: 12px; }
   .card-text-block, .buddy-text-block { display: none; }
+
+  /* Workbench print: model output without controls that cannot act on paper. */
+  .wrap { max-width: none; padding: 0; }
+  .mast { padding: 0 0 8pt; border-bottom: 1pt solid #888; }
+  .mast-actions, .notice, .rail, .legend, .timeline, .export-row, .btn, button,
+  .skip, .method-panel summary { display: none !important; }
+  .layout { display: block; }
+  .plate { margin: 0 0 8pt; }
+  .plate svg, .panel svg { width: 100%; max-width: 100%; height: auto; }
+  .panel { break-inside: avoid; border-top: 1pt solid #bbb; padding-top: 6pt; }
+  .table-wrap { overflow: visible; }
+  .sheet { font-size: 9pt; }
+  a { color: #111; }
 }
 
 @media (max-width: 720px) {
