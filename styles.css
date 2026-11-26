@@ -4,6 +4,7 @@
   --ink: #142b2b;
   --muted: #465f57;
   --hair: #c3c9b9;
+  --control-line: #657260;
   --map: #112f31;
   --map-edge: #0c302f;
   --mint: #bdeba7;
@@ -152,6 +153,7 @@ body {
 }
 .secondary { border-bottom: 1px solid var(--hair); padding: 0; }
 .secondary > summary {
+  border-bottom: 1px solid var(--control-line);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -167,6 +169,7 @@ body {
 .secondary > summary:focus-visible { outline-offset: 0; }
 .advanced { border-bottom: 1px solid var(--hair); padding: 0; }
 .advanced summary {
+  border-bottom: 1px solid var(--control-line);
   cursor: pointer;
   padding: 13px 0;
   font-size: 12px;
@@ -198,7 +201,7 @@ textarea {
   width: 100%;
   margin-top: 4px;
   padding: 7px 9px;
-  border: 1px solid var(--hair);
+  border: 1px solid var(--control-line);
   border-radius: 2px;
   background: #fff;
   color: var(--ink);
@@ -434,6 +437,9 @@ dialog#card-dialog::backdrop, dialog#buddy-dialog::backdrop { background: rgba(2
 
 /* Methodology drawer keeps the panel frame with a titled summary. */
 .method-panel summary {
+  border: 1px solid var(--control-line);
+  border-radius: 2px;
+  padding: 6px 8px;
   cursor: pointer;
   font-size: 12.5px;
   font-weight: 700;
@@ -565,11 +571,23 @@ input[type="range"] { min-height: 1.5rem; }
   .mast-actions, .notice, .rail, .legend, .timeline, .export-row, .btn, button,
   .skip, .method-panel summary { display: none !important; }
   .layout { display: block; }
-  .plate { margin: 0 0 8pt; }
+  .plate, .tier-row, .slider-row, label[for="bookmark-url"], label[for="verify-input"] { display: none !important; }
   .plate svg, .panel svg { width: 100%; max-width: 100%; height: auto; }
   .panel { break-inside: avoid; border-top: 1pt solid #bbb; padding-top: 6pt; }
   .table-wrap { overflow: visible; }
-  .sheet { font-size: 9pt; }
+  input, select, textarea, summary { display: none !important; }
+  .sheet { font-size: 7.2pt; }
+  .sheet th, .sheet td { white-space: normal; overflow-wrap: break-word; padding-right: 3pt; }
+  .sheet td:first-child, .sheet th:first-child { min-width: 0; }
+  #compare-table { width: 100%; min-width: 0; table-layout: fixed; }
+  #compare-table th:nth-child(1) { width: 17%; }
+  #compare-table th:nth-child(2) { width: 7%; }
+  #compare-table th:nth-child(3) { width: 10%; }
+  #compare-table th:nth-child(4) { width: 10%; }
+  #compare-table th:nth-child(5) { width: 11%; }
+  #compare-table th:nth-child(6) { width: 25%; }
+  #compare-table th:nth-child(7) { width: 8%; }
+  #compare-table th:nth-child(8) { width: 12%; }
   a { color: #111; }
 }
 
@@ -615,5 +633,7 @@ input[type="range"] { min-height: 1.5rem; }
   .btn, .btn.small { min-height: 44px; }
   input[type="text"], select { min-height: 44px; }
   input[type="range"] { min-height: 44px; }
+  summary { min-height: 44px; }
+  .check { min-height: 44px; align-items: center; }
   .tier-row .btn { flex: 1 1 calc(50% - 8px); }
 }
