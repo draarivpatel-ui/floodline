@@ -6,7 +6,7 @@ const CSV_NOTICE = 'Synthetic training data. Never use for navigation.';
 const AUDIT_NOTICE = 'Synthetic training exercise output for education only. It is not a forecast, warning, or evacuation order. Never enter floodwater and follow local emergency alerts.';
 const METERS_PER_DEGREE = 111195;
 // BOM is a Cf too; the class also covers zero-width spaces, bidi marks and tag chars.
-const FORMULA_GUARD = /^(?:[\t\r\n]|[\s\p{Cf}]*[=+@-])/u;
+const FORMULA_GUARD = /^(?:[\t\r\n]|[\s\p{Cf}\p{Cc}]*[=+@-])/u;
 
 export function csvCell(value) {
   if (value == null) return '';
